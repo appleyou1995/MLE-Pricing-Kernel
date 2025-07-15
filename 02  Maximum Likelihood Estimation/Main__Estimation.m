@@ -68,11 +68,13 @@ end
 
 coefficients_T = coefficients';
 output_matrix = [log_likelihoods; coefficients_T];
+rounded_matrix = round(output_matrix, 3);
 
 header = strcat('N', string(1:max_N));
 row_names = ["LogLikelihood", "c1", "c2", "c3", "c4", "c5"];
 row_names = row_names(1:size(output_matrix,1));
-result_table = array2table(output_matrix, ...
+
+result_table = array2table(rounded_matrix, ...
     'VariableNames', header, ...
     'RowNames', row_names);
 
