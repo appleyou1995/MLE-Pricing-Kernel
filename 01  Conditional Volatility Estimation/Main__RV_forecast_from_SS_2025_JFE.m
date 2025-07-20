@@ -16,5 +16,8 @@ RV_forecast = table(RV_forecast_provided.dates_RV_forecast, RV_forecast_provided
 
 %% 
 
-RV_forecast.Daily_Implied_MonthlyVol = ...
-    (RV_forecast.RV_Forecast / sqrt(252)) * sqrt(12);
+RV_forecast.MonthlySigma = ...
+    sqrt(RV_forecast.RV_Forecast) / sqrt(12) / 100;
+
+output_filename = fullfile(Path_Output, 'RV_forecast_with_MonthlySigma.csv');
+writetable(RV_forecast, output_filename);
