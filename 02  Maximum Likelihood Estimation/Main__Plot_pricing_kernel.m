@@ -51,46 +51,45 @@ max_N = width(estimation_table);
 
 %% Setting
 
-R_plot = linspace(0.8, 1.2, 10000)';
+t = 312;
+
+R_grid = Smooth_AllR{1, t};
+f_star_R = Smooth_AllR_RND{1, t};
+
+r_annual = Risk_Free_Rate{t, 3};
+Rf_t = exp(r_annual * (Target_TTM / 252));
+
+plot_date = Risk_Free_Rate{t, 1};
+
+idx = (R_grid >= 0.8) & (R_grid <= 1.2);
+R_plot = R_grid(idx);
+f_star_R = f_star_R(idx);
+
 logR = log(R_plot);
-
-t = 291;
-
-f_star_R = Smooth_AllR_RND(:, t);
-f_star_R = f_star_R{1,1};
-
-R_grid = Smooth_AllR(:, t);
-R_grid = R_grid{1,1};
 
 
 %% Compute delta
 
-Rf_t = Risk_Free_Rate{t,2};  % 假設取第t期
-
-% 準備儲存每一組 M 函數
 M_all = zeros(length(R_plot), max_N);
 
 for col = 1:max_N
-    % 取得對應的係數向量
-    c_names = estimation_table.Properties.RowNames(2:end);  % 去掉 LogLikelihood
+    c_names = estimation_table.Properties.RowNames(2:end);
     c_values = estimation_table{c_names, col};
-    c_values = c_values(~isnan(c_values));  % 移除 NaN
+    c_values = c_values(~isnan(c_values));
     N = length(c_values);
     
-    % 計算 inner exponential term over grid（在 R_grid 上積分）
+    % delta_t
     logR_grid = log(R_grid);
     exponent_term = zeros(size(R_grid));
     for i = 1:N
         exponent_term = exponent_term + c_values(i) .* (logR_grid.^i);
     end
     discount_factor = exp(-exponent_term);
-
-    % 積分計算 δₜ（使用 trapezoidal rule）
-    integrand = f_star_R .* discount_factor;
+    integrand = Smooth_AllR_RND{1, t} .* discount_factor;
     integral_value = trapz(R_grid, integrand);
     delta_t = -log(Rf_t) + log(integral_value);
 
-    % 對應每一個 R，計算 M(R)
+    % M(R)
     exponent_plot = zeros(size(R_plot));
     for i = 1:N
         exponent_plot = exponent_plot + c_values(i) .* (logR.^i);
@@ -101,10 +100,18 @@ end
 
 %% Plot
 
+plot_date_dt = datetime(num2str(plot_date), 'InputFormat', 'yyyyMMdd');
+date_str = num2str(plot_date);
+
 figure;
 plot(R_plot, M_all, 'LineWidth', 1.5)
-legend("N=1", "N=2", "N=3", "N=4", "N=5", 'Location', 'best')
+legend("N=1", "N=2", "N=3", "N=4", "N=5", 'Location', 'northwest', 'Box', 'off')
 xlabel('$R_{t+1}$', 'Interpreter', 'latex')
 ylabel('$M(R_{t+1}; \theta)$', 'Interpreter', 'latex')
-title('Estimated Pricing Kernels under Different $N$', 'Interpreter', 'latex')
+title(['Pricing Kernels on ', date_str, ' under Different N'], ...
+      'Interpreter', 'latex')
 grid on;
+
+filename = sprintf('Pricing_Kernels_Special_Case_b=0_%s.png', date_str);
+saveas(gcf, fullfile(Path_Output, filename));
+clear filename
