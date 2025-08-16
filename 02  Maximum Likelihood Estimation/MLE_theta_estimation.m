@@ -1,6 +1,8 @@
 %% Main Function: MLE Theta Estimation for Pricing Kernel
 
-function [theta_hat, log_lik] = MLE_theta_estimation(Smooth_AllR, Smooth_AllR_RND, Realized_Return, Risk_Free_Rate, N)
+function [theta_hat, log_lik] = MLE_theta_estimation( ...
+    Smooth_AllR, Smooth_AllR_RND, Realized_Return, Risk_Free_Rate, ...
+    RV_forecast, N, estimate_b, b_fixed)
 
     % Set seed for reproducibility
     rng(0);
@@ -10,8 +12,16 @@ function [theta_hat, log_lik] = MLE_theta_estimation(Smooth_AllR, Smooth_AllR_RN
     R_vec   = Realized_Return.realized_ret;   % R_{t+1}
     Rf_vec  = Risk_Free_Rate.rate;            % R^f_t
 
-    % Initial guess for theta (c_1,...,c_N)
-    theta0 = zeros(N, 1);
+    % Initial guess
+    if estimate_b
+        theta0 = [zeros(N,1); 1];             % Initial: c_i = 0, b = 1
+        LB = [-Inf(N,1); 0];                  % c_i free, b ≥ 0
+        UB = [Inf(N,1); 5];                   % Optional upper bound for b
+    else
+        theta0 = zeros(N,1);
+        LB = [];
+        UB = [];
+    end
 
     % Optimization options
     options = optimoptions('fmincon', ...
@@ -19,13 +29,9 @@ function [theta_hat, log_lik] = MLE_theta_estimation(Smooth_AllR, Smooth_AllR_RN
         'Algorithm', 'interior-point', ...
         'SpecifyObjectiveGradient', false);
 
-    % Bounds (optional, currently none)
-    LB = [];
-    UB = [];
-
     % Define objective function (fmincon minimizes, so we negate the log-likelihood)
     obj_fun = @(theta) -log_likelihood_function(theta, R_vec, Rf_vec, ...
-                        N, Smooth_AllR, Smooth_AllR_RND, dates);
+        N, Smooth_AllR, Smooth_AllR_RND, dates, RV_forecast, estimate_b, b_fixed);
 
     % Run optimization
     [theta_hat, neg_LL, exitflag, ~] = fmincon(obj_fun, theta0, [], [], [], [], LB, UB, [], options);
@@ -42,29 +48,45 @@ function [theta_hat, log_lik] = MLE_theta_estimation(Smooth_AllR, Smooth_AllR_RN
         disp(['❌ fmincon failed. Exit flag: ', num2str(exitflag)]);
     end
     
-    % Display final result
-    disp('Estimated parameters (θ):');
-    disp(theta_hat);
-    disp(['Final log-likelihood = ', num2str(-neg_LL)]);
+    % Display output
+    if estimate_b
+        disp('Estimated coefficients (c_i):');
+        disp(theta_hat(1:N));
+        disp(['Estimated b = ', num2str(theta_hat(end))]);
+    else
+        disp('Estimated coefficients (c_i):');
+        disp(theta_hat);
+        disp(['Fixed b = ', num2str(b_fixed)]);
+    end
+    disp(['Final log-likelihood = ', num2str(log_lik)]);
 
 end
 
 
 %% Local Function: Log-Likelihood Function
 
-function LL = log_likelihood_function(theta, R_vec, Rf_vec, N, Smooth_AllR, Smooth_AllR_RND, dates)
+function LL = log_likelihood_function(theta, R_vec, Rf_vec, N, ...
+    Smooth_AllR, Smooth_AllR_RND, dates, RV_forecast, estimate_b, b_fixed)
 
     T = length(R_vec);
     LL = 0;
 
-    % Parameter vector: theta = [c_1, ..., c_N]
-    c = theta(:);
+    % Parameter vector: theta
+    if estimate_b
+        c = theta(1:N);
+        b = theta(end);
+    else
+        c = theta(:);
+        b = b_fixed;
+    end
 
+    % log-likelihood
     for t = 1:T
 
         % === Step 1: Basic inputs ===
         R_realized_t = R_vec(t);                                           % (1*1) Realized gross return R_{t+1}
         Rf_t = Rf_vec(t);                                                  % (1*1) Risk-free rate R^f_t
+        sigma_t = RV_forecast.MonthlySigma(t);                             % (1*1) Sigma
 
         date_str = num2str(dates(t));
         R_axis = Smooth_AllR.(date_str);                                   % (1*30000) Gross return grid
@@ -75,7 +97,8 @@ function LL = log_likelihood_function(theta, R_vec, Rf_vec, N, Smooth_AllR, Smoo
         % === Step 2: Compute δ_t from footnote 4 ===
         poly_sum_neg = zeros(size(logR_grid));                             % (1*30000) -∑_{i=1}^N c_i * (log R)^i
         for i = 1:N
-            poly_sum_neg = poly_sum_neg - c(i) * (logR_grid.^i);
+            c_it = c(i) / (sigma_t^(b * i));
+            poly_sum_neg = poly_sum_neg - c_it * (logR_grid.^i);
         end
 
         integrand = f_star_curve .* exp(poly_sum_neg);                     % (1*30000) f^* * exp{ -∑ c_i (log R)^i }
@@ -84,10 +107,11 @@ function LL = log_likelihood_function(theta, R_vec, Rf_vec, N, Smooth_AllR, Smoo
         delta_t = -log(Rf_t) + log(integral_val);                          % (1*1)     δ_t = -ln R^f_t + ln ∫...
 
 
-        % === Step 3: Evaluate M(R_{t+1}; θ) from equation (6) ===
+        % === Step 3: Evaluate M(R_{t+1}; θ) ===
         poly_curve = zeros(size(logR_grid));
         for i = 1:N
-            poly_curve = poly_curve + c(i) .* (logR_grid.^i);
+            c_it = c(i) / (sigma_t^(b * i));
+            poly_curve = poly_curve + c_it .* (logR_grid.^i);
         end
         M_grid = exp(delta_t + poly_curve);                                % (1*30000) Pricing kernel M(R_{t+1}; θ)
 
