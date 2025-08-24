@@ -58,7 +58,7 @@ clear b_value var_name k theta_hat mat_files
 
 %% Function: compute_M_spline_on_date
 
-function M_plot = compute_M_spline_on_date(theta, b, R_axis_full, f_star_full, R_plot, Rf_t)
+function [M_plot, delta_t] = compute_M_spline_on_date(theta, b, R_axis_full, f_star_full, R_plot, Rf_t)
 
     degree = 3;                                                            % cubic B-spline
 
@@ -118,7 +118,8 @@ f_star_pl = f_star_full(idx_plot);
 Path_Code_03 = fullfile(Path_MainFolder, 'Code', '03  Estimation - Cubic B-Spline');
 addpath(Path_Code_03);
 
-M_stack = zeros(numel(R_plot), numel(b_list));
+M_stack     = zeros(numel(R_plot), numel(b_list));
+delta_stack = zeros(1            , numel(b_list));
 
 for j = 1:numel(b_list)
 
@@ -128,18 +129,20 @@ for j = 1:numel(b_list)
     theta_hat = eval(theta_varname);
     theta_hat = theta_hat(:);
 
-    M_tmp = compute_M_spline_on_date(theta_hat, b, R_axis_full, f_star_full, R_plot, Rf_t);
-    M_stack(:, j) = M_tmp(:);
+    [M_tmp, delta_t] = compute_M_spline_on_date(theta_hat, b, R_axis_full, f_star_full, R_plot, Rf_t);
+    M_stack(:, j)     = M_tmp(:);
+    delta_stack(1, j) = delta_t;
 
 end
 
 
-%% Plot
+%% Plot pricing kernel
 
 figure; 
 plot(R_plot, M_stack, 'LineWidth', 1.6); grid on;
-legend(arrayfun(@(x) sprintf('b = %d', x), b_list, 'UniformOutput', false), ...
-       'Location', 'northwest', 'Box', 'off');
+legend(arrayfun(@(x, d) sprintf('b = %d (\\delta_t = %.4f)', x, d), ...
+       b_list, delta_stack, 'UniformOutput', false), ...
+       'Location', 'northeast', 'Box', 'off');
 
 xlabel('$R_{t+1}$', 'Interpreter', 'latex');
 ylabel('$M(R_{t+1}; \theta)$', 'Interpreter', 'latex');
@@ -149,3 +152,90 @@ title(sprintf('Pricing Kernel (Spline) on %s', date_str), 'Interpreter', 'latex'
 out_png = sprintf('Pricing_Kernels_Spline_%s.png', date_str);
 saveas(gcf, fullfile(Path_Output, out_png));
 disp(['Saved figure: ', fullfile(Path_Output, out_png)]);
+
+
+%% Function: compute_delta_spline_on_date & build_delta_series
+
+% 1: compute_delta_spline_on_date
+function delta_t = compute_delta_spline_on_date(theta, b, R_axis_full, f_star_full, Rf_t)
+    degree = 3;
+
+    min_knot = min(R_axis_full);
+    max_knot = max(R_axis_full);
+    N_full   = numel(R_axis_full);
+
+    % B-spline basis function
+    B_full = zeros(b+1, N_full);
+    for i = 1:(b+1)
+        B_full(i, :) = Bspline_basis_function_value(degree, b, min_knot, max_knot, i, R_axis_full);
+    end
+    g_vec_full = theta(:).' * B_full;                                      % 1×N_full
+
+    % δ_t = -log(Rf_t) + log(∫ f*_t(R) * exp(-g(R)) dR)
+    integrand   = f_star_full .* exp(-g_vec_full);
+    integralVal = trapz(R_axis_full, integrand);
+    delta_t     = -log(Rf_t) + log(integralVal);
+end
+
+
+% 2: build_delta_series
+function [date_dt, delta_vec] = build_delta_series(theta, b, ...
+        Realized_Return, Risk_Free_Rate, Target_TTM, Smooth_AllR, Smooth_AllR_RND)
+
+    nT = height(Realized_Return);
+    date_dt   = NaT(nT, 1);
+    delta_vec = NaN(nT, 1);
+
+    for t = 1:nT
+        dnum       = Realized_Return.date(t);
+        date_str   = num2str(dnum);
+        date_dt(t) = datetime(num2str(dnum), 'InputFormat', 'yyyyMMdd');
+        
+        R_axis_full = Smooth_AllR.(date_str);
+        f_star_full = Smooth_AllR_RND.(date_str);
+
+        Rf_t_annual = Risk_Free_Rate.rate(t);
+        Rf_t        = exp(Rf_t_annual * (Target_TTM / 252));
+
+        delta_vec(t) = compute_delta_spline_on_date(theta, b, R_axis_full, f_star_full, Rf_t);
+    end
+end
+
+
+%% Plot delta_t
+
+T = height(Realized_Return);
+
+delta_table = table;
+date_dt_any = [];
+
+figure; hold on; grid on;
+
+for j = 1:numel(b_list)
+    b = b_list(j);
+
+    theta_varname = sprintf('theta_hat_%d', b);
+    theta_hat = eval(theta_varname);
+    theta_hat = theta_hat(:);
+
+    [date_dt, delta_vec] = build_delta_series(theta_hat, b, ...
+        Realized_Return, Risk_Free_Rate, Target_TTM, Smooth_AllR, Smooth_AllR_RND);
+
+    plot(date_dt, delta_vec, 'LineWidth', 1, 'DisplayName', sprintf('b = %d', b));
+
+    if isempty(date_dt_any)
+        date_dt_any = date_dt;
+        delta_table = table(date_dt_any, 'VariableNames', {'Date'});
+    end
+    delta_table.(sprintf('delta_b%d', b)) = delta_vec;
+end
+
+ylabel('${\delta_t}$', 'Interpreter', 'latex', 'Rotation', 0);
+title(sprintf('Time Series of $\\delta_t$'), 'Interpreter', 'latex');
+legend('Location', 'southwest', 'Box', 'off'); box on;
+
+% Output
+out_png2 = sprintf('Delta_t_Timeseries.png');
+saveas(gcf, fullfile(Path_Output, out_png2));
+disp(['Saved figure: ', fullfile(Path_Output, out_png2)]);
+
