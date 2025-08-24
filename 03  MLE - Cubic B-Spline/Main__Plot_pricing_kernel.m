@@ -115,7 +115,7 @@ f_star_pl = f_star_full(idx_plot);
 %% Build pricing kernel
 
 % Add paths
-Path_Code_03 = fullfile(Path_MainFolder, 'Code', '03  Estimation - Cubic B-Spline');
+Path_Code_03 = fullfile(Path_MainFolder, 'Code', '03  MLE - Cubic B-Spline');
 addpath(Path_Code_03);
 
 M_stack     = zeros(numel(R_plot), numel(b_list));

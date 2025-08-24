@@ -56,7 +56,7 @@ clear Path_Code_01 FileName idx_RV
 %% (1) Estimation - General Case: Estimate b
 
 % Add paths
-Path_Code_02 = fullfile(Path_MainFolder, 'Code', '02  Maximum Likelihood Estimation');
+Path_Code_02 = fullfile(Path_MainFolder, 'Code', '02  MLE - Exponential Polynomial');
 addpath(Path_Code_02);
 
 % Initialize result storage
@@ -93,7 +93,7 @@ writetable(result_table_bfree, fullfile(Path_Output, 'MLE_bfree.csv'), 'WriteRow
 %% (2) Estimation - Special Case: Fixed b = 0
 
 % Add paths
-Path_Code_02 = fullfile(Path_MainFolder, 'Code', '02  Maximum Likelihood Estimation');
+Path_Code_02 = fullfile(Path_MainFolder, 'Code', '02  MLE - Exponential Polynomial');
 addpath(Path_Code_02);
 
 % Initialize result storage
@@ -129,7 +129,7 @@ writetable(result_table_b0, fullfile(Path_Output, 'MLE_b0.csv'), 'WriteRowNames'
 %% (3) Estimation - Special Case: Fixed b = 1
 
 % Add paths
-Path_Code_02 = fullfile(Path_MainFolder, 'Code', '02  Maximum Likelihood Estimation');
+Path_Code_02 = fullfile(Path_MainFolder, 'Code', '02  MLE - Exponential Polynomial');
 addpath(Path_Code_02);
 
 % Initialize result storage

@@ -44,7 +44,7 @@ clear FileName input_filename year Path_Data_01 Path_Data_01_main Path_Data_02 d
 %% Estimation
 
 % Add paths
-Path_Code_03 = fullfile(Path_MainFolder, 'Code', '03  Estimation - Cubic B-Spline');
+Path_Code_03 = fullfile(Path_MainFolder, 'Code', '03  MLE - Cubic B-Spline');
 addpath(Path_Code_03);
 
 b_list = [4, 6, 8];
