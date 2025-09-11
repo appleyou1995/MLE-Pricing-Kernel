@@ -17,7 +17,8 @@ Realized_Return = readtable(fullfile(Path_Data_01, FileName));
 % Load risk-free rate R_f^t
 Path_Data_01_main = fullfile(Path_Data, 'Code', '01  原始資料處理');
 FileName = 'Risk_Free_Rate.csv';
-Risk_Free_Rate = readtable(fullfile(Path_Data_01_main, FileName));
+Risk_Free_Rate_All = readtable(fullfile(Path_Data_01_main, FileName));
+Risk_Free_Rate = Risk_Free_Rate_All.rf_gross_29d;
 
 % Load Q-measure PDF tables: R axis and corresponding f^*_t(R)
 Path_Data_02 = fullfile(Path_Data, 'Code', '02  輸出資料');
@@ -52,9 +53,9 @@ b_list = [4, 6, 8];
 for b = b_list
     fprintf('\n=== Estimating MLE for b = %d ===\n', b);
     
-    [theta_hat, log_lik] = MLE_theta_estimation( ...
+    [theta_hat, log_lik, delta_vec, M_vec] = MLE_theta_estimation( ...
         Smooth_AllR, Smooth_AllR_RND, Realized_Return, Risk_Free_Rate, b);
     
     OutputFile = fullfile(Path_Output, sprintf('MLE_theta_b%d.mat', b));
-    save(OutputFile, 'theta_hat', 'log_lik');
+    save(OutputFile, 'theta_hat', 'log_lik', 'delta_vec', 'M_vec');
 end

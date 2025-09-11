@@ -1,6 +1,6 @@
 %% Main Function: MLE Theta Estimation for Pricing Kernel
 
-function [theta_hat, log_lik] = MLE_theta_estimation( ...
+function [theta_hat, log_lik, delta_vec, M_vec] = MLE_theta_estimation( ...
     Smooth_AllR, Smooth_AllR_RND, Realized_Return, Risk_Free_Rate, b)
 
     % Settings
@@ -12,7 +12,7 @@ function [theta_hat, log_lik] = MLE_theta_estimation( ...
     % Pull inputs
     dates   = Realized_Return.date;
     R_vec   = Realized_Return.realized_ret;                                % realized gross return R_{t+1}
-    Rf_vec  = Risk_Free_Rate.rate;                                         % risk-free R^f_t
+    Rf_vec  = Risk_Free_Rate;                                              % risk-free R^f_t
 
     % Optimization options
     options = optimoptions('fmincon', ...
@@ -42,16 +42,26 @@ function [theta_hat, log_lik] = MLE_theta_estimation( ...
     disp(['b = ', num2str(b)]);
     disp(['Final log-likelihood = ', num2str(log_lik)]);
 
+    % Post-estimation call
+    [~, delta_vec, M_vec] = log_likelihood_spline(theta_hat, R_vec, Rf_vec, ...
+    Smooth_AllR, Smooth_AllR_RND, dates, b);
+
 end
 
 
 %% Local Function: Log-Likelihood Function
 
-function LL = log_likelihood_spline(theta, R_vec, Rf_vec, ...
+function [LL, delta_vec, M_vec] = log_likelihood_spline(theta, R_vec, Rf_vec, ...
     Smooth_AllR, Smooth_AllR_RND, dates, b)
-
+    
     T = length(R_vec);
     LL = 0;
+
+    R_axis_1 = Smooth_AllR.(num2str(dates(1)));
+    N        = numel(R_axis_1);
+
+    delta_vec = NaN(T, 1);
+    M_vec     = NaN(T, N);
 
     % log-likelihood
     for t = 1:T
@@ -83,10 +93,11 @@ function LL = log_likelihood_spline(theta, R_vec, Rf_vec, ...
         integral_val = trapz(R_axis, integrand);                           % (1*1)     ∫ f^* exp{-∑} dR
 
         delta_t = -log(Rf_t) + log(integral_val);                          % (1*1)     δ_t = -ln R^f_t + ln ∫...
-
+        delta_vec(t) = delta_t;
 
         % === Step 3: Evaluate M(R_{t+1}; θ) and f_physical curve ===
         M_grid  = exp(delta_t + g_vec);                                    % (1*30000) Pricing kernel M(R_{t+1}; θ)
+        M_vec(t, :) = M_grid;
         f_curve = f_star_curve ./ (Rf_t * M_grid);
 
 

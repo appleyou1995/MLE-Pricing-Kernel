@@ -9,36 +9,22 @@ Path_Output = fullfile(Path_MainFolder, 'Code', '03  Output');
 
 Target_TTM = 30;
 
-% Load realized gross returns (R_{t+1})
-Path_Data_01 = fullfile(Path_Data, 'Code', '01  輸出資料');
-FileName = ['Realized_Return_TTM_', num2str(Target_TTM), '.csv'];
-Realized_Return = readtable(fullfile(Path_Data_01, FileName));
-
-% Load risk-free rate R_f^t
-Path_Data_01_main = fullfile(Path_Data, 'Code', '01  原始資料處理');
-FileName = 'Risk_Free_Rate.csv';
-Risk_Free_Rate = readtable(fullfile(Path_Data_01_main, FileName));
-
 % Load Q-measure PDF tables: R axis and corresponding f^*_t(R)
 Path_Data_02 = fullfile(Path_Data, 'Code', '02  輸出資料');
-Smooth_AllK = [];
 Smooth_AllR = [];
-Smooth_AllR_RND = [];
 
 years_to_merge = 1996:2021;
 for year = years_to_merge
     input_filename = fullfile(Path_Data_02, sprintf('TTM_%d_RND_Tables_%d.mat', Target_TTM, year));
     if exist(input_filename, 'file')
         data = load(input_filename);
-        Smooth_AllK = [Smooth_AllK, data.Table_Smooth_AllK];
         Smooth_AllR = [Smooth_AllR, data.Table_Smooth_AllR];               % R_grid for interpolation
-        Smooth_AllR_RND = [Smooth_AllR_RND, data.Table_Smooth_AllR_RND];   % f^*_t(R) on grid
     else
         warning('File %s does not exist.', input_filename);
     end
 end
 
-clear FileName input_filename year Path_Data_01 Path_Data_01_main Path_Data_02 data years_to_merge
+clear input_filename year Path_Data_02 data years_to_merge
 
 
 %% Load estimation result
@@ -47,195 +33,144 @@ mat_files = dir(fullfile(Path_Output, 'MLE_theta_b*.mat'));
 
 for k = 1:length(mat_files)
     file_path = fullfile(Path_Output, mat_files(k).name);
-    load(file_path, 'theta_hat');
+    load(file_path, 'M_vec', 'delta_vec');
     b_value = regexp(mat_files(k).name, '(?<=_b)(\d+)', 'match', 'once');
-    var_name = ['theta_hat_' b_value];
-    assignin('base', var_name, theta_hat);
+    var_name = ['M_vec_' b_value];
+    assignin('base', var_name, M_vec);
+    assignin('base', ['delta_vec_' b_value], delta_vec);
 end
 
-clear b_value var_name k theta_hat mat_files
+clear file_path b_value var_name k M_vec delta_vec mat_files
 
 
-%% Function: compute_M_spline_on_date
-
-function [M_plot, delta_t] = compute_M_spline_on_date(theta, b, R_axis_full, f_star_full, R_plot, Rf_t)
-
-    degree = 3;                                                            % cubic B-spline
-
-    % --- Full grid basis for integral ---
-    min_knot = min(R_axis_full);
-    max_knot = max(R_axis_full);
-    N_full   = numel(R_axis_full);
-
-    B_full = zeros(b+1, N_full);
-    for i = 1:(b+1)
-        B_full(i, :) = Bspline_basis_function_value(degree, b, min_knot, max_knot, i, R_axis_full);
-    end
-    g_vec_full = theta(:).' * B_full;                                      % 1×N_full
-
-    % δ_t
-    integrand   = f_star_full .* exp(-g_vec_full);
-    integralVal = trapz(R_axis_full, integrand);
-    delta_t     = -log(Rf_t) + log(integralVal);
-
-    % --- Plot grid basis for drawing ---
-    B_plot = zeros(b+1, numel(R_plot));
-    for i = 1:(b+1)
-        B_plot(i, :) = Bspline_basis_function_value(degree, b, min_knot, max_knot, i, R_plot);
-    end
-    g_vec_plot = theta(:).' * B_plot;                                      % 1×N_plot
-
-    % M(R) on plot grid
-    M_plot = exp(delta_t + g_vec_plot);
-end
-
-
-%% Setting
+%% Average M across all periods and Plot
 
 b_list = [4, 6, 8];
+M_all = {M_vec_4, M_vec_6, M_vec_8};
+theta_all = {theta_hat_4, theta_hat_6, theta_hat_8};
 
-% Choose a plotting time index t
-t = 100;
-date_str = num2str(Realized_Return.date(t));
+date_fields = Smooth_AllR.Properties.VariableNames;
+R_base = Smooth_AllR.(date_fields{1});
 
-% Pull inputs for date t
-R_axis_full = Smooth_AllR.(date_str);                                      % 1×N grid of gross returns
-f_star_full = Smooth_AllR_RND.(date_str);                                  % 1×N Q-measure PDF on the grid
+T = size(date_fields, 2);
+N = numel(R_base);
 
-% Risk-free R^f_t
-Rf_t_annual = Risk_Free_Rate.rate(t);
-Rf_t        = exp(Rf_t_annual * (Target_TTM / 252));
+figure;
+set(gcf, 'Position', [100, 100, 1200, 400]);
+layout = tiledlayout(1, 3, 'TileSpacing','Compact','Padding','None');
 
-% Range of R_axis
-idx_plot  = (R_axis_full >= 0.8) & (R_axis_full <= 1.2);
-R_plot    = R_axis_full(idx_plot);
-f_star_pl = f_star_full(idx_plot);
+for j = 1:length(b_list)
+    b = b_list(j);
+    M_vec = M_all{j};
+
+    M_interp = NaN(T, N);
+    for t = 1:T
+        R_t = Smooth_AllR.(date_fields{t});
+        M_t = M_vec(t,:);
+        M_interp(t,:) = interp1(R_t, M_t, R_base, 'linear', NaN);
+    end
+    
+    M_avg = mean(M_interp, 1, 'omitnan');
+    
+    nexttile;
+    plot(R_base, M_avg, 'LineWidth', 1.5);
+    set(gca, 'FontName','Times New Roman');
+    grid on;
+    xlim([0.8 1.2]);
+    ylim([0.8 2.5]);
+
+    xlabel('Gross Return', 'FontName','Times New Roman');
+    if j == 1
+        ylabel('$\mathrm{E}(M)$', 'Interpreter','latex');
+    end
+
+    title(sprintf('$b=%d$', b), ...
+          'FontName','Times New Roman', 'Interpreter','latex');
+end
+
+filename = 'Average Pricing Kernel.png';
+saveas(gcf, fullfile(Path_Output, filename));
 
 
-%% Build pricing kernel
+%% Average M across all periods
 
-% Add paths
-Path_Code_03 = fullfile(Path_MainFolder, 'Code', '03  MLE - Cubic B-Spline');
-addpath(Path_Code_03);
+b_list   = [4, 6, 8];
+M_all    = {M_vec_4, M_vec_6, M_vec_8};
 
-M_stack     = zeros(numel(R_plot), numel(b_list));
-delta_stack = zeros(1            , numel(b_list));
+date_fields = Smooth_AllR.Properties.VariableNames;
+R_base = Smooth_AllR.(date_fields{1});
+T = numel(date_fields);
+N = numel(R_base);
+
+M_avg_all = NaN(numel(b_list), N);
 
 for j = 1:numel(b_list)
+    M_vec = M_all{j};
 
-    b = b_list(j);
-
-    theta_varname = sprintf('theta_hat_%d', b);
-    theta_hat = eval(theta_varname);
-    theta_hat = theta_hat(:);
-
-    [M_tmp, delta_t] = compute_M_spline_on_date(theta_hat, b, R_axis_full, f_star_full, R_plot, Rf_t);
-    M_stack(:, j)     = M_tmp(:);
-    delta_stack(1, j) = delta_t;
-
-end
-
-
-%% Plot pricing kernel
-
-figure; 
-plot(R_plot, M_stack, 'LineWidth', 1.6); grid on;
-legend(arrayfun(@(x, d) sprintf('b = %d (\\delta_t = %.4f)', x, d), ...
-       b_list, delta_stack, 'UniformOutput', false), ...
-       'Location', 'northeast', 'Box', 'off');
-
-xlabel('$R_{t+1}$', 'Interpreter', 'latex');
-ylabel('$M(R_{t+1}; \theta)$', 'Interpreter', 'latex');
-
-title(sprintf('Pricing Kernel (MLE) on %s', date_str), 'Interpreter', 'latex');
-
-out_png = sprintf('Pricing_Kernels_MLE_%s.png', date_str);
-saveas(gcf, fullfile(Path_Output, out_png));
-disp(['Saved figure: ', fullfile(Path_Output, out_png)]);
-
-
-%% Function: compute_delta_spline_on_date & build_delta_series
-
-% 1: compute_delta_spline_on_date
-function delta_t = compute_delta_spline_on_date(theta, b, R_axis_full, f_star_full, Rf_t)
-    degree = 3;
-
-    min_knot = min(R_axis_full);
-    max_knot = max(R_axis_full);
-    N_full   = numel(R_axis_full);
-
-    % B-spline basis function
-    B_full = zeros(b+1, N_full);
-    for i = 1:(b+1)
-        B_full(i, :) = Bspline_basis_function_value(degree, b, min_knot, max_knot, i, R_axis_full);
+    M_interp = NaN(T, N);
+    for t = 1:T
+        R_t = Smooth_AllR.(date_fields{t});
+        M_t = M_vec(t,:);
+        M_interp(t,:) = interp1(R_t, M_t, R_base, 'linear', NaN);
     end
-    g_vec_full = theta(:).' * B_full;                                      % 1×N_full
 
-    % δ_t = -log(Rf_t) + log(∫ f*_t(R) * exp(-g(R)) dR)
-    integrand   = f_star_full .* exp(-g_vec_full);
-    integralVal = trapz(R_axis_full, integrand);
-    delta_t     = -log(Rf_t) + log(integralVal);
+    M_avg_all(j,:) = mean(M_interp, 1, 'omitnan');
 end
 
 
-% 2: build_delta_series
-function [date_dt, delta_vec] = build_delta_series(theta, b, ...
-        Realized_Return, Risk_Free_Rate, Target_TTM, Smooth_AllR, Smooth_AllR_RND)
+%% Plot setting
 
-    nT = height(Realized_Return);
-    date_dt   = NaT(nT, 1);
-    delta_vec = NaN(nT, 1);
+set(groot, 'defaultAxesFontName', 'Times New Roman');
+set(groot, 'defaultAxesFontSize', 12);
+set(groot, 'defaultTextInterpreter', 'latex');
+set(groot, 'defaultLegendInterpreter', 'latex');
 
-    for t = 1:nT
-        dnum       = Realized_Return.date(t);
-        date_str   = num2str(dnum);
-        date_dt(t) = datetime(num2str(dnum), 'InputFormat', 'yyyyMMdd');
-        
-        R_axis_full = Smooth_AllR.(date_str);
-        f_star_full = Smooth_AllR_RND.(date_str);
 
-        Rf_t_annual = Risk_Free_Rate.rate(t);
-        Rf_t        = exp(Rf_t_annual * (Target_TTM / 252));
+%% Plot Average Pricing Kernel
 
-        delta_vec(t) = compute_delta_spline_on_date(theta, b, R_axis_full, f_star_full, Rf_t);
-    end
+figure; set(gcf, 'Position', [120, 120, 680, 480]);
+
+hold on;
+for j = 1:numel(b_list)
+    plot(R_base, M_avg_all(j,:), 'LineWidth', 1.5, ...
+         'DisplayName', sprintf('$b = %d$', b_list(j)));
 end
+hold off;
+
+grid on;
+box on;
+xlim([0.8 1.2]);
+ylim([0.8 2.5]);
+
+xlabel('Gross Return $R$');
+ylabel('$\mathrm{E}(M)$');
+title('Average Pricing Kernel (MLE)');
+legend('Location','southwest', 'Box','off');
+
+saveas(gcf, fullfile(Path_Output, 'Average_Pricing_Kernel_MLE.png'));
 
 
-%% Plot delta_t
+%% Plot delta_t Time Series (MLE) 
 
-T = height(Realized_Return);
+date_dt = datetime(date_fields, 'InputFormat','yyyyMMdd');
+delta_all  = {delta_vec_4, delta_vec_6, delta_vec_8};
 
-delta_table = table;
-date_dt_any = [];
-
-figure; hold on; grid on;
+figure;
+set(gcf, 'Position', [100, 100, 1500, 500]);
+layout = tiledlayout(1, 3, 'TileSpacing','Compact','Padding','None');
 
 for j = 1:numel(b_list)
-    b = b_list(j);
+    nexttile;
+    plot(date_dt, delta_all{j}, 'LineWidth', 1.2);
+    grid on; box on;
+    set(gca, 'FontName','Times New Roman');
 
-    theta_varname = sprintf('theta_hat_%d', b);
-    theta_hat = eval(theta_varname);
-    theta_hat = theta_hat(:);
-
-    [date_dt, delta_vec] = build_delta_series(theta_hat, b, ...
-        Realized_Return, Risk_Free_Rate, Target_TTM, Smooth_AllR, Smooth_AllR_RND);
-
-    plot(date_dt, delta_vec, 'LineWidth', 1, 'DisplayName', sprintf('b = %d', b));
-
-    if isempty(date_dt_any)
-        date_dt_any = date_dt;
-        delta_table = table(date_dt_any, 'VariableNames', {'Date'});
+    title(sprintf('$b$ = %d', b_list(j)), 'Interpreter','latex');
+    if j == 1
+        ylabel('$\delta_t$', 'Rotation', 0);
     end
-    delta_table.(sprintf('delta_b%d', b)) = delta_vec;
 end
 
-ylabel('${\delta_t}$', 'Interpreter', 'latex', 'Rotation', 0);
-title(sprintf('Time Series of $\\delta_t$ (MLE)'), 'Interpreter', 'latex');
-legend('Location', 'southwest', 'Box', 'off'); box on;
-
-% Output
-out_png2 = sprintf('Delta_t_Timeseries_MLE.png');
-saveas(gcf, fullfile(Path_Output, out_png2));
-disp(['Saved figure: ', fullfile(Path_Output, out_png2)]);
-
+out_png = fullfile(Path_Output, 'Delta_t_Timeseries_MLE.png');
+saveas(gcf, out_png);
+disp(['Saved figure: ', out_png]);
