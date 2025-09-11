@@ -47,7 +47,6 @@ clear file_path b_value var_name k M_vec delta_vec mat_files
 
 b_list = [4, 6, 8];
 M_all = {M_vec_4, M_vec_6, M_vec_8};
-theta_all = {theta_hat_4, theta_hat_6, theta_hat_8};
 
 date_fields = Smooth_AllR.Properties.VariableNames;
 R_base = Smooth_AllR.(date_fields{1});
