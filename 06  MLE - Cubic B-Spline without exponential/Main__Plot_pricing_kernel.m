@@ -75,8 +75,8 @@ for j = 1:length(b_list)
     plot(R_base, M_avg, 'LineWidth', 1.5);
     set(gca, 'FontName','Times New Roman');
     grid on;
-    xlim([0.8 1.2]);
-    ylim([0.99 1.01]);
+    xlim([0 3]);
+    % ylim([0.99 1.01]);
 
     xlabel('Gross Return', 'FontName','Times New Roman');
     if j == 1
