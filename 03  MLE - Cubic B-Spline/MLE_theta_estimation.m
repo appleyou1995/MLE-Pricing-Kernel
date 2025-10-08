@@ -8,6 +8,7 @@ function [theta_hat, log_lik, delta_vec, M_vec] = MLE_theta_estimation( ...
     theta0 = zeros(1, b+1);                                                % initial guess
     LB = [];
     UB = [];
+    logM_cap = log(50);
 
     % Pull inputs
     dates   = Realized_Return.date;
@@ -25,8 +26,9 @@ function [theta_hat, log_lik, delta_vec, M_vec] = MLE_theta_estimation( ...
                      Smooth_AllR, Smooth_AllR_RND, dates, b);
 
     % Run optimization
+    nonlcon = @(theta) nlcon_cap(theta, Rf_vec, Smooth_AllR, Smooth_AllR_RND, dates, b, logM_cap);
     [theta_hat, neg_LL, exitflag] = fmincon(obj_fun, theta0, ...
-                                [],[],[],[], LB, UB, [], options);
+                                [],[],[],[], LB, UB, nonlcon, options);
 
     % Return log-likelihood (positive value)
     log_lik = -neg_LL;
@@ -113,4 +115,28 @@ function [LL, delta_vec, M_vec] = log_likelihood_spline(theta, R_vec, Rf_vec, ..
         LL = LL + log(max(f_physical_at_realized, 1e-12));
 
     end
+end
+
+
+%% Local Function: constraint
+
+function [c,ceq] = nlcon_cap(theta, Rf_vec, Smooth_AllR, Smooth_AllR_RND, dates, b, logM_cap)
+    T = numel(dates);  c = [];
+    for t=1:T
+        date_str = num2str(dates(t));
+        R = Smooth_AllR.(date_str);   fs = Smooth_AllR_RND.(date_str);
+        Z = trapz(R,fs); 
+        if ~(Z>0), c=[c;1]; continue; else, fs=fs./Z; end
+        degree=3; 
+        B=zeros(b+1,numel(R));
+        for i=1:b+1, B(i,:)=Bspline_basis_function_value(degree,b,min(R),max(R),i,R); end
+        g = (theta*B);
+        Rf = Rf_vec(t);
+        integral_val = trapz(R, fs .* exp(-g));
+        delta = -log(Rf) + log(max(integral_val, realmin));
+        mask = fs > 1e-6;
+        logM = delta + g(mask);
+        c = [c; logM(:) - logM_cap];
+    end
+    ceq = [];
 end
