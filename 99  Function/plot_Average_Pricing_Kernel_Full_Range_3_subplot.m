@@ -1,5 +1,5 @@
 function [fig, M_avg_all] = plot_Average_Pricing_Kernel_Full_Range_3_subplot( ...
-    Smooth_AllR, M_all, b_list, R_base, varargin)
+    Smooth_AllR, M_all, param_count_list, R_base, varargin)
 
     % ---- parse options ----
     ip = inputParser;
@@ -21,9 +21,9 @@ function [fig, M_avg_all] = plot_Average_Pricing_Kernel_Full_Range_3_subplot( ..
     % ---- basics & checks ----
     date_fields = Smooth_AllR.Properties.VariableNames;
     T = numel(date_fields);
-    J = numel(b_list);
+    J = numel(param_count_list);
     if numel(M_all) ~= J
-        error('M_all 的長度 (%d) 必須等於 b_list 的長度 (%d)。', numel(M_all), J);
+        error('M_all 的長度 (%d) 必須等於 param_count_list 的長度 (%d)。', numel(M_all), J);
     end
     R_base = R_base(:)';
     N = numel(R_base);
@@ -61,7 +61,7 @@ function [fig, M_avg_all] = plot_Average_Pricing_Kernel_Full_Range_3_subplot( ..
         if j == 1
             ylabel('$\mathrm{E}(M)$', 'Interpreter', opt.Interpreter);
         end
-        title(sprintf('$b=%d$', b_list(j)), 'FontName', opt.FontName, 'Interpreter', opt.Interpreter);
+        title(sprintf('$L=%d$', param_count_list(j)), 'FontName', opt.FontName, 'Interpreter', opt.Interpreter);
     end
 
     % ---- save ----

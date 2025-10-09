@@ -1,4 +1,4 @@
-function [fig, date_dt] = plot_Delta_Time_Series_MLE(date_fields, delta_all, b_list, varargin)
+function [fig, date_dt] = plot_Delta_Time_Series_MLE(date_fields, delta_all, param_count_list, varargin)
 
     % ----- parse options -----
     ip = inputParser;
@@ -14,13 +14,15 @@ function [fig, date_dt] = plot_Delta_Time_Series_MLE(date_fields, delta_all, b_l
     opt = ip.Results;
 
     % ----- basic checks -----
-    if numel(delta_all) ~= numel(b_list)
-        error('delta_all (size %d) 必須與 b_list (size %d) 對應。', numel(delta_all), numel(b_list));
+    if numel(delta_all) ~= numel(param_count_list)
+        error('delta_all (size %d) 必須與 param_count_list (size %d) 對應。', ...
+            numel(delta_all), numel(param_count_list));
     end
     T = numel(date_fields);
-    for j = 1:numel(b_list)
+    for j = 1:numel(param_count_list)
         if numel(delta_all{j}) ~= T
-            error('delta_all{%d} 長度 (%d) 必須等於期數 T (%d)。', j, numel(delta_all{j}), T);
+            error('delta_all{%d} 長度 (%d) 必須等於期數 T (%d)。', ...
+                j, numel(delta_all{j}), T);
         end
     end
 
@@ -29,9 +31,9 @@ function [fig, date_dt] = plot_Delta_Time_Series_MLE(date_fields, delta_all, b_l
 
     % ----- plot -----
     fig = figure; set(fig, 'Position', opt.FigurePosition);
-    tiledlayout(1, numel(b_list), 'TileSpacing','Compact','Padding','None');
+    tiledlayout(1, numel(param_count_list), 'TileSpacing','Compact','Padding','None');
 
-    for j = 1:numel(b_list)
+    for j = 1:numel(param_count_list)
         nexttile;
         plot(date_dt, delta_all{j}, 'LineWidth', opt.LineWidth);
         grid on; box on;
@@ -39,7 +41,7 @@ function [fig, date_dt] = plot_Delta_Time_Series_MLE(date_fields, delta_all, b_l
 
         if ~isempty(opt.YLim), ylim(opt.YLim); end
 
-        title(sprintf('$b$ = %d', b_list(j)), 'Interpreter','latex');
+        title(sprintf('$L$ = %d', param_count_list(j)), 'Interpreter','latex');
         if j == 1
             ylabel(opt.YLabel, 'Interpreter','latex', 'Rotation', opt.YLabelRotation);
         end

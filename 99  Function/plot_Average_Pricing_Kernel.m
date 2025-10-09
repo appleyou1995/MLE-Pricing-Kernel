@@ -1,5 +1,5 @@
 function [fig, M_avg_all] = plot_Average_Pricing_Kernel( ...
-    Smooth_AllR, M_all, b_list, R_base, varargin)
+    Smooth_AllR, M_all, param_count_list, R_base, varargin)
 
     % ---- parse options ----
     ip = inputParser;
@@ -21,9 +21,9 @@ function [fig, M_avg_all] = plot_Average_Pricing_Kernel( ...
     % ---- basics & checks ----
     date_fields = Smooth_AllR.Properties.VariableNames;
     T = numel(date_fields);
-    J = numel(b_list);
+    J = numel(param_count_list);
     if numel(M_all) ~= J
-        error('M_all length (%d) must match b_list length (%d).', numel(M_all), J);
+        error('M_all length (%d) must match param_count_list length (%d).', numel(M_all), J);
     end
     R_base = R_base(:)';
     N = numel(R_base);
@@ -50,7 +50,7 @@ function [fig, M_avg_all] = plot_Average_Pricing_Kernel( ...
     hold on;
     for j = 1:J
         plot(R_base, M_avg_all(j,:), 'LineWidth', opt.LineWidth, ...
-             'DisplayName', sprintf('$b = %d$', b_list(j)));
+             'DisplayName', sprintf('$L = %d$', param_count_list(j)));
     end
     hold off;
 

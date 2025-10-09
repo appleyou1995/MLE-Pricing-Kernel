@@ -1,6 +1,6 @@
 function [fig, M_avg_all, band_lo_all, band_hi_all] = ...
     plot_Average_Pricing_Kernel_Extreme_Interval_3_subplot( ...
-        Smooth_AllR, M_all, b_list, R_base, varargin)
+        Smooth_AllR, M_all, param_count_list, R_base, varargin)
 
     % ---- options ----
     ip = inputParser;
@@ -25,9 +25,9 @@ function [fig, M_avg_all, band_lo_all, band_hi_all] = ...
     % ---- checks ----
     date_fields = Smooth_AllR.Properties.VariableNames;
     T = numel(date_fields);
-    J = numel(b_list);
+    J = numel(param_count_list);
     if numel(M_all) ~= J
-        error('M_all 的長度 (%d) 必須等於 b_list 的長度 (%d)。', numel(M_all), J);
+        error('M_all 的長度 (%d) 必須等於 param_count_list 的長度 (%d)。', numel(M_all), J);
     end
     R_base = R_base(:)';  N = numel(R_base);
 
@@ -76,7 +76,7 @@ function [fig, M_avg_all, band_lo_all, band_hi_all] = ...
 
         % 畫平均線
         hMean = plot(R_base, M_avg_all(j,:), 'LineWidth', opt.LineWidth, ...
-                     'DisplayName', sprintf('$b = %d$', b_list(j)));
+                     'DisplayName', sprintf('$b = %d$', param_count_list(j)));
 
         % 以平均線的顏色畫上下百分位虛線
         col = get(hMean, 'Color');
@@ -92,7 +92,7 @@ function [fig, M_avg_all, band_lo_all, band_hi_all] = ...
         if j == 1
             ylabel('$\mathrm{E}(M)$', 'Interpreter', opt.Interpreter);
         end
-        title(sprintf('$b=%d$', b_list(j)), 'FontName', opt.FontName, 'Interpreter', opt.Interpreter);
+        title(sprintf('$L=%d$', param_count_list(j)), 'FontName', opt.FontName, 'Interpreter', opt.Interpreter);
 
         hold off;
         clear p
