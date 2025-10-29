@@ -109,7 +109,7 @@ function [LL, delta_vec, M_vec] = log_likelihood_function(param, R_vec, Rf_vec, 
         Rf_t_times_M_grid = Rf_t * M_grid;
         baseline_pdf = f_star_curve ./ Rf_t_times_M_grid;                  % (1*30000)
 
-        % baseline 正規化與健診
+        % baseline regularization
         if ~all(isfinite(baseline_pdf))
             LL = LL + log(1e-12);
             continue
@@ -128,7 +128,7 @@ function [LL, delta_vec, M_vec] = log_likelihood_function(param, R_vec, Rf_vec, 
         % Distortion
         FP_distort_inverse = exp(-((-log(tildeF)).^(1/alpha))/beta);
 
-        % 數值微分 + 正規化
+        % Numerical differentiation + regularization
         f_physical_curve = gradient(FP_distort_inverse, R_axis);
         f_physical_curve = max(f_physical_curve, 0);
         Z1 = trapz(R_axis, f_physical_curve);
