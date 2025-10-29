@@ -46,12 +46,12 @@ clear Risk_Free_Rate_All years_to_merge data FileName input_filename year
 
 diff = 0.1;
 
-alpha_min = 0.5;
-alpha_max = 2.0;
+alpha_min  = 0.5;
+alpha_max  = 2.0;
 alpha_grid = alpha_min:diff:alpha_max;
 
-beta_min  = 0.5;
-beta_max  = 2.0;
+beta_min  = 0.9;
+beta_max  = 1.1;
 beta_grid = beta_min:diff:beta_max;
 
 
@@ -92,18 +92,17 @@ for a = 1:length(alpha_grid)
 
         for L = 1:max_L
 
-            outname = sprintf('MLE_gamma_L_%d_alpha%.2f_beta%.2f.mat', L, alpha, beta);
+            outname = sprintf('MLE_gamma_L_%d_alpha_%.1f_beta_%.1f.mat', L, alpha, beta);
             OutputFile = fullfile(Path_Output, outname);
 
-            fprintf('\n--- Estimating: L=%d, alpha=%.2f, beta=%.2f ---\n', L, alpha, beta);
+            fprintf('\n--- Estimating: L = %d, alpha = %.1f, beta = %.1f ---\n', L, alpha, beta);
             t0 = tic;
             [gamma_hat, log_lik, delta_vec, M_vec] = MLE_gamma_estimation( ...
                 Smooth_AllR, Smooth_AllR_RND, ...
                 Realized_Return_front, Risk_Free_Rate_front, ...
                 L, use_delta, alpha, beta);
 
-            save(OutputFile, 'gamma_hat', 'log_lik', 'delta_vec', 'M_vec', ...
-                 'L', 'alpha', 'beta', '-v7.3');
+            save(OutputFile, 'gamma_hat', 'log_lik', 'L', 'alpha', 'beta');
 
             elapsed = toc(t0);
             fprintf('Saved: %s (logLik=%.4g, %.2fs)\n', outname, log_lik, elapsed);

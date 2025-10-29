@@ -85,12 +85,13 @@ function [LL, delta_vec, M_vec] = log_likelihood_function(param, R_vec, Rf_vec, 
         for l = 1:L
             poly_sum = poly_sum + gamma(l) * (logR_grid.^l);
         end
+        poly_sum = max(min(poly_sum, 60), -60);
         
 
         % === Step 3: Compute δ_t if enabled ===
         if use_delta
             integrand = f_star_curve .* exp(poly_sum);                     % (1*30000)
-            integral_val = trapz(R_axis, integrand);                       % (1*1)
+            integral_val = max(trapz(R_axis, integrand), 1e-300);          % (1*1)
             delta_t = -log(Rf_t) + log(integral_val);                      % (1*1)
         else
             delta_t = 0;
@@ -108,35 +109,58 @@ function [LL, delta_vec, M_vec] = log_likelihood_function(param, R_vec, Rf_vec, 
         Rf_t_times_M_grid = Rf_t * M_grid;
         baseline_pdf = f_star_curve ./ Rf_t_times_M_grid;                  % (1*30000)
 
+        % baseline 正規化與健診
+        if ~all(isfinite(baseline_pdf))
+            LL = LL + log(1e-12);
+            continue
+        end
+        Z0 = trapz(R_axis, baseline_pdf);
+        if ~isfinite(Z0) || Z0<=0
+            LL = LL + log(1e-12);
+            continue
+        end
+        baseline_pdf = baseline_pdf ./ Z0;
+
         tildeF = cumtrapz(R_axis, baseline_pdf);
         tildeF = tildeF ./ max(tildeF(end), 1e-12);
         tildeF = min(max(tildeF, 1e-12), 1-1e-12);
 
         % Distortion
         FP_distort_inverse = exp(-((-log(tildeF)).^(1/alpha))/beta);
+
+        % 數值微分 + 正規化
         f_physical_curve = gradient(FP_distort_inverse, R_axis);
         f_physical_curve = max(f_physical_curve, 0);
-        f_physical_curve = f_physical_curve ./ trapz(R_axis, f_physical_curve);
+        Z1 = trapz(R_axis, f_physical_curve);
+        if ~isfinite(Z1) || Z1<=0
+            LL = LL + log(1e-12);
+            continue
+        end
+        f_physical_curve = f_physical_curve ./ Z1;
+
+        % check before interpolate
+        mask = isfinite(R_axis) & isfinite(f_physical_curve);
+        R_axis_good = R_axis(mask);
+        fP_good     = f_physical_curve(mask);
+        if numel(R_axis_good) < 2
+            LL = LL + log(1e-12);
+            continue
+        end
 
 
         % === Step 6: Interpolate f_t(R_{t+1}; γ) ===
-        if R_realized_t < min(R_axis) || R_realized_t > max(R_axis)
-            f_physical_at_realized = 1e-10;                                % Penalize out-of-bound realized returns
+        if R_realized_t < R_axis_good(1) || R_realized_t > R_axis_good(end)
+            f_physical_at_realized = 1e-12;
         else
-            f_physical_at_realized = interp1(R_axis, f_physical_curve, R_realized_t, 'pchip', 'extrap');
+            f_physical_at_realized = interp1(R_axis_good, fP_good, R_realized_t, 'pchip');
+                if ~isfinite(f_physical_at_realized) || f_physical_at_realized<=0
+                    f_physical_at_realized = 1e-12;
+                end
         end
 
 
         % === Step 7: Accumulate log-likelihood ===
-        LL = LL + log(max(f_physical_at_realized, 1e-12));
+        LL = LL + log(f_physical_at_realized);
 
     end
 end
-
-
-% %% Local Function: Distortion
-% 
-% function x = Prelec_Dinv(y, alpha, beta)
-%     y = min(max(y, 1e-12), 1-1e-12);                                       % clamp to (0,1)
-%     x = exp(-((-log(y)).^(1/alpha))/beta);
-% end
