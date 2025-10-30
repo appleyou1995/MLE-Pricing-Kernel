@@ -81,7 +81,6 @@ Risk_Free_Rate_front  = Risk_Free_Rate(1:T1);
 % setting
 max_L     = 3;
 use_delta = true;
-MLE_rows  = [];
 
 fprintf('\n========== Stage 1: MLE (front sample only) ==========\n');
 for a = 1:length(alpha_grid)
@@ -106,8 +105,6 @@ for a = 1:length(alpha_grid)
 
             elapsed = toc(t0);
             fprintf('Saved: %s (logLik=%.4g, %.2fs)\n', outname, log_lik, elapsed);
-
-            MLE_rows = [MLE_rows; {alpha, beta, L, log_lik, 'ok', OutputFile}];
         end
     end
 end
