@@ -30,9 +30,9 @@ for year = years_to_merge
     input_filename = fullfile(Path_Data_02, sprintf('TTM_%d_RND_Tables_%d.mat', Target_TTM, year));
     if exist(input_filename, 'file')
         data = load(input_filename);
-        Smooth_AllK = [Smooth_AllK, data.Table_Smooth_AllK];
-        Smooth_AllR = [Smooth_AllR, data.Table_Smooth_AllR];               % R_grid for interpolation
-        Smooth_AllR_RND = [Smooth_AllR_RND, data.Table_Smooth_AllR_RND];   % f^*_t(R) on grid
+        Smooth_AllK = [Smooth_AllK, data.Table_Smooth_AllK];               %#ok<AGROW>
+        Smooth_AllR = [Smooth_AllR, data.Table_Smooth_AllR];               %#ok<AGROW>
+        Smooth_AllR_RND = [Smooth_AllR_RND, data.Table_Smooth_AllR_RND];   %#ok<AGROW>
     else
         warning('File %s does not exist.', input_filename);
     end
@@ -64,7 +64,7 @@ T1 = floor(T/2);
 idx_valid = (T1+1):T;
 
 
-%% First Stage Only: MLE over (alpha, beta, L)
+%% Stage 1: MLE over (alpha, beta, L)
 
 clc
 Path_Output = fullfile(Path_MainFolder, 'Code', '08  Output');
@@ -107,4 +107,67 @@ for a = 1:length(alpha_grid)
             fprintf('Saved: %s (logLik=%.4g, %.2fs)\n', outname, log_lik, elapsed);
         end
     end
+end
+
+
+%% Stage 2: Validation on back sample
+
+clc
+Path_Output = fullfile(Path_MainFolder, 'Code', '08  Output');
+
+% Add paths
+Path_Code_08 = fullfile(Path_MainFolder, 'Code', ...
+    '08  MLE -  Exponential Polynomial with Distortion');
+addpath(Path_Code_08);
+
+% split sample
+Realized_Return_back = Realized_Return(idx_valid, :);
+Risk_Free_Rate_back  = Risk_Free_Rate(idx_valid);
+T2 = height(Realized_Return_back);
+
+% Estimation result from stage 1
+files = dir(fullfile(Path_Output, 'MLE_gamma_L_*_alpha_*.mat'));
+
+fprintf('\n========== Stage 2: Validation (back sample) ==========\n');
+
+Results = table('Size',[0 6], ...
+    'VariableTypes', {'double','double','double','double','double','string'}, ...
+    'VariableNames', {'L','alpha','beta','score','logLikStage1','file'});
+
+best.score = inf;
+best.idx   = NaN;
+
+for ff = 1:numel(files)
+    S = files(ff);
+    load(fullfile(S.folder, S.name), 'gamma_hat','log_lik','L','alpha','beta');
+
+    % calculate validation score
+    score = Compute_validation_error( ...
+        gamma_hat, L, Smooth_AllR, Smooth_AllR_RND, ...
+        Realized_Return_back, Risk_Free_Rate_back, true, ...
+        alpha, beta);
+    Results = [Results; {L, alpha, beta, score, log_lik, string(S.name)}]; %#ok<AGROW>
+
+    % find best
+    if score < best.score
+        best.score = score;
+        best.idx   = height(Results);
+    end
+
+    fprintf('Checked: %-38s  L=%d  alpha=%.2f  beta=%.2f  score=%.4g\n', ...
+        S.name, L, alpha, beta, score);
+end
+
+% output
+if ~isempty(Results)
+    Results = sortrows(Results, 'score');
+    disp(Results(1:min(10,height(Results)), :));
+
+    b = Results(1,:);
+    fprintf('\nBest by validation: L=%d, alpha=%.3f, beta=%.3f, score=%.4g (stage1 logLik=%.4g)\n', ...
+        b.L, b.alpha, b.beta, b.score, b.logLikStage1);
+
+    save(fullfile(Path_Output, 'Stage2_validation_results.mat'), 'Results');
+else
+    warning('No Stage-1 result files found in %s', Path_Output);
 end
