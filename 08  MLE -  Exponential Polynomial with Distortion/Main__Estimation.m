@@ -50,8 +50,8 @@ alpha_min  = 0.5;
 alpha_max  = 2.0;
 alpha_grid = alpha_min:diff:alpha_max;
 
-beta_min  = 0.9;
-beta_max  = 1.1;
+beta_min  = 1.0;
+beta_max  = 1.0;
 beta_grid = beta_min:diff:beta_max;
 
 

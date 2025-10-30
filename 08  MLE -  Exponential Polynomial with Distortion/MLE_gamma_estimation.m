@@ -125,12 +125,14 @@ function [LL, delta_vec, M_vec] = log_likelihood_function(param, R_vec, Rf_vec, 
         tildeF = tildeF ./ max(tildeF(end), 1e-12);
         tildeF = min(max(tildeF, 1e-12), 1-1e-12);
 
-        % Distortion
-        FP_distort_inverse = exp(-((-log(tildeF)).^(1/alpha))/beta);
+        % Distortion via closed-form Jacobian
+        w    = -log(tildeF);                                               % w = -ln h(R)
+        Dinv = exp( -(w.^(1/alpha)) / beta );                              % D^{-1}(h)
+        Jac  = Dinv .* ( w.^(1/alpha - 1) ) ./ ( alpha*beta .* tildeF );   % d D^{-1}/d h
 
-        % Numerical differentiation + regularization
-        f_physical_curve = gradient(FP_distort_inverse, R_axis);
-        f_physical_curve = max(f_physical_curve, 0);
+        f_physical_curve = Jac .* baseline_pdf;
+
+        % f_physical_curve regularization
         Z1 = trapz(R_axis, f_physical_curve);
         if ~isfinite(Z1) || Z1<=0
             LL = LL + log(1e-12);
