@@ -176,3 +176,191 @@ if ~isempty(Results)
 else
     warning('No Stage-1 result files found in %s', Path_Output);
 end
+
+
+%% Plot setting
+
+set(groot, 'defaultAxesFontName', 'Times New Roman');
+set(groot, 'defaultAxesFontSize', 12);
+set(groot, 'defaultTextInterpreter', 'latex');
+set(groot, 'defaultLegendInterpreter', 'latex');
+set(groot, 'defaultLineMarkerFaceColor','auto');
+
+
+%% Plot validation_loss
+
+figure('Position',[100 100 700 450]);
+hold on;
+
+L_values = unique(Results.L);
+
+for i = 1:length(L_values)
+    L_i = L_values(i);
+    idx = Results.L == L_i;
+    
+    [alpha_sorted, order] = sort(Results.alpha(idx));
+    val_loss_sorted = Results.validation_loss(idx);
+    val_loss_sorted = val_loss_sorted(order);
+    
+    plot(alpha_sorted, val_loss_sorted, '--', 'LineWidth', 1.8, ...
+        'DisplayName', sprintf('L = %d', L_i));
+end
+
+hold off;
+xlabel('$\alpha$');
+ylabel('Validation Loss');
+legend('show', 'Location', 'best', 'Box', 'off');
+grid on;
+
+set(gca, 'LooseInset', get(gca, 'TightInset'));
+
+alpha_min = min(Results.alpha);
+alpha_max = max(Results.alpha);
+xticks(linspace(alpha_min, alpha_max, 16));
+
+% Output
+out_png = sprintf('plot_validation_loss_beta_1.png');
+saveas(gcf, fullfile(Path_Output, out_png));
+
+
+%% Plot log-likelihood (Stage 1)
+
+figure('Position',[100 100 700 450]);
+hold on;
+
+L_values = unique(Results.L);
+
+for i = 1:length(L_values)
+    L_i = L_values(i);
+    idx = Results.L == L_i;
+
+    [alpha_sorted, order] = sort(Results.alpha(idx));
+    loglik_sorted = Results.logLikStage1(idx);
+    loglik_sorted = loglik_sorted(order);
+
+    plot(alpha_sorted, loglik_sorted, '--', 'LineWidth', 1.8, ...
+        'DisplayName', sprintf('L = %d', L_i));
+end
+
+hold off;
+xlabel('$\alpha$');
+ylabel('Stage-1 Log-Likelihood');
+legend('show', 'Location', 'best', 'Box', 'off');
+grid on;
+
+set(gca, 'LooseInset', get(gca, 'TightInset'));
+
+alpha_min = min(Results.alpha);
+alpha_max = max(Results.alpha);
+xticks(linspace(alpha_min, alpha_max, 16));
+
+% Output
+out_png = 'plot_logLikStage1_beta_1.png';
+saveas(gcf, fullfile(Path_Output, out_png));
+
+
+%% Plot M curve
+
+% Find the smallest validation_loss
+best_rows = cell(3,1);
+for L_i = 1:3
+    rows = Results(Results.L==L_i & Results.beta==1, :);
+    [~, ix] = min(rows.validation_loss);
+    best_rows{L_i} = rows(ix, :);
+end
+
+% sample split
+Realized_Return_front = Realized_Return(1:T1, :);
+Realized_Return_back = Realized_Return(idx_valid, :);
+Realized_Return_all  = Realized_Return;
+
+Risk_Free_Rate_front  = Risk_Free_Rate(1:T1);
+Risk_Free_Rate_back  = Risk_Free_Rate(idx_valid);
+Risk_Free_Rate_all  = Risk_Free_Rate(:);
+
+dates       = Realized_Return.date;
+dates_front = dates(1:T1);
+dates_back  = dates(idx_valid);
+dates_all   = dates(1:T);
+
+samples = { ...
+    struct('name','Front sample','R',Realized_Return_front, ...
+                                 'Rf',Risk_Free_Rate_front, ...
+                                 'dates',dates_front), ...
+    struct('name','Back sample', 'R',Realized_Return_back , ...
+                                 'Rf',Risk_Free_Rate_back , ...
+                                 'dates',dates_back ), ...
+    struct('name','All sample' , 'R',Realized_Return, ...
+                                 'Rf',Risk_Free_Rate, ...
+                                 'dates',dates_all ) ...
+};
+
+% Add paths
+Path_Code_08 = fullfile(Path_MainFolder, 'Code', ...
+    '08  MLE -  Exponential Polynomial with Distortion');
+addpath(Path_Code_08);
+
+function [R_axis, M_bar] = compute_M_curve(gamma_hat, L, alpha, beta, ...
+    R_vec, Rf_vec, dates_vec, Smooth_AllR, Smooth_AllR_RND)
+
+    if istable(R_vec),     R_vec     = table2array(R_vec);     end
+    if istable(Rf_vec),    Rf_vec    = table2array(Rf_vec);    end
+    if istable(dates_vec), dates_vec = table2array(dates_vec); end
+
+    [~, delta_vec, M_vec] = log_likelihood_function( ...
+        gamma_hat, R_vec, Rf_vec, L, ...
+        Smooth_AllR, Smooth_AllR_RND, dates_vec, true, alpha, beta); %#ok<ASGLU>
+
+    R_axis = Smooth_AllR.(num2str(dates_vec(1)));
+    R_base = R_axis(:)';
+    N      = numel(R_base);
+
+    date_fields = arrayfun(@(d) num2str(d), dates_vec, 'UniformOutput', false);
+    T = numel(dates_vec);
+    M_interp = NaN(T, N);
+    for t = 1:T
+        R_t = Smooth_AllR.(date_fields{t});
+        M_t = M_vec(t, :);
+        M_interp(t, :) = interp1(R_t, M_t, R_base, 'pchip', NaN);
+    end
+    M_bar  = mean(M_interp, 1, 'omitnan');    
+end
+
+
+% plot
+figure('Position',[50 80 1100 380]);
+layout = tiledlayout(1, 3, 'TileSpacing', 'Compact', 'Padding', 'None');
+
+for sp = 1:3
+    nexttile;
+    hold on;
+    for L_i = 1:3
+        row = best_rows{L_i};
+
+        Sfile = fullfile(Path_Output, row.file);
+        data  = load(Sfile, 'gamma_hat', 'L', 'alpha', 'beta');
+        fprintf('\n[Sample %d]  L = %d, alpha = %.1f, beta = %.1f, gamma_hat = %s\n', ...
+            sp, row.L, row.alpha, row.beta, mat2str(data.gamma_hat, 4));
+
+        [R_axis, M_bar] = compute_M_curve( ...
+            data.gamma_hat, row.L, row.alpha, row.beta, ...
+            samples{sp}.R, samples{sp}.Rf, samples{sp}.dates, ...
+            Smooth_AllR, Smooth_AllR_RND);
+
+        plot(R_axis, M_bar, 'LineWidth', 1.8, ...
+            'DisplayName', sprintf('$L=%d$', row.L));
+    end
+    hold off;
+    title(samples{sp}.name);
+    xlabel('$R$'); ylabel('$E(M)$');
+    legend('show','Location','northeast','Box','off');
+    grid on;
+    xlim([0.8 1.2]);
+    ylim([0.4 2.3]);
+    set(gca,'LooseInset',get(gca,'TightInset'));
+end
+
+% Output
+out_png = 'plot_M_curve_beta_1.png';
+saveas(gcf, fullfile(Path_Output, out_png));
+
