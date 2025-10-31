@@ -4,10 +4,10 @@ clc
 % Path_Output = fullfile(Path_MainFolder, 'Code', '08  Output - half');
 
 % ----- Case 2 -----
-Path_Output = fullfile(Path_MainFolder, 'Code', '08  Output - two_thirds');
+% Path_Output = fullfile(Path_MainFolder, 'Code', '08  Output - two_thirds');
 
 % ----- Case 3 -----
-% Path_Output = fullfile(Path_MainFolder, 'Code', '08  Output - all');
+Path_Output = fullfile(Path_MainFolder, 'Code', '08  Output - all');
 
 
 %% 
