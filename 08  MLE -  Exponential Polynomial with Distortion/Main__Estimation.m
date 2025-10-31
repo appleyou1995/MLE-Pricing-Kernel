@@ -50,24 +50,34 @@ alpha_min  = 0.5;
 alpha_max  = 2.0;
 alpha_grid = alpha_min:diff:alpha_max;
 
-beta_min  = 0.5;
-beta_max  = 0.9;
+beta_min  = 1.0;
+beta_max  = 1.0;
 beta_grid = beta_min:diff:beta_max;
 
 
 %% Split sample
 
 T  = height(Realized_Return);
-T1 = floor(T/2);
 
-% validation
-idx_valid = (T1+1):T;
+% ----- Case 1 -----
+% T1 = floor(T/2);
+% idx_valid = (T1+1):T;
+% Path_Output = fullfile(Path_MainFolder, 'Code', '08  Output - half');
+
+% ----- Case 2 -----
+% T1 = floor(2*T/3);
+% idx_valid = (T1+1):T;
+% Path_Output = fullfile(Path_MainFolder, 'Code', '08  Output - two_thirds');
+
+% ----- Case 3 -----
+T1 = T;
+idx_valid = 1:T;
+Path_Output = fullfile(Path_MainFolder, 'Code', '08  Output - all');
 
 
 %% Stage 1: MLE over (alpha, beta, L)
 
 clc
-Path_Output = fullfile(Path_MainFolder, 'Code', '08  Output');
 
 % Add paths
 Path_Code_08 = fullfile(Path_MainFolder, 'Code', ...
@@ -113,7 +123,6 @@ end
 %% Stage 2: Validation on back sample
 
 clc
-Path_Output = fullfile(Path_MainFolder, 'Code', '08  Output');
 
 % Add paths
 Path_Code_08 = fullfile(Path_MainFolder, 'Code', ...
@@ -207,9 +216,9 @@ for i = 1:length(L_values)
 end
 
 hold off;
-xlabel('$\alpha$');
-ylabel('Validation Loss');
-legend('show', 'Location', 'best', 'Box', 'off');
+xlabel('$\alpha$', 'FontSize', 14);
+ylabel('Validation Loss', 'FontSize', 14);
+legend('show', 'Location', 'best', 'Box', 'off', 'FontSize', 14);
 grid on;
 
 set(gca, 'LooseInset', get(gca, 'TightInset'));
