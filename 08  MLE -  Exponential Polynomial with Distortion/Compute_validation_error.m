@@ -1,4 +1,4 @@
-function score = Compute_validation_error( ...
+function validation_loss = Compute_validation_error( ...
     gamma_hat, L, Smooth_AllR, Smooth_AllR_RND, ...
     Realized_Return_valid, Risk_Free_Rate_valid, use_delta, ...
     alpha, beta)
@@ -71,11 +71,11 @@ function score = Compute_validation_error( ...
     % delete NaN
     Uvec = Uvec(isfinite(Uvec));
     if isempty(Uvec)
-        score = inf; 
+        validation_loss = inf; 
         return
     end
 
     % score
     m_emp = arrayfun(@(k) mean(Uvec.^k), k_list);
-    score = sum((m_emp - m_tar).^2);
+    validation_loss = sum((m_emp - m_tar).^2);
 end

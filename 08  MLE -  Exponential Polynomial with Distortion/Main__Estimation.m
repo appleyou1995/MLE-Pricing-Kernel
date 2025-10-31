@@ -50,8 +50,8 @@ alpha_min  = 0.5;
 alpha_max  = 2.0;
 alpha_grid = alpha_min:diff:alpha_max;
 
-beta_min  = 1.0;
-beta_max  = 1.0;
+beta_min  = 0.5;
+beta_max  = 0.9;
 beta_grid = beta_min:diff:beta_max;
 
 
@@ -132,40 +132,45 @@ fprintf('\n========== Stage 2: Validation (back sample) ==========\n');
 
 Results = table('Size',[0 6], ...
     'VariableTypes', {'double','double','double','double','double','string'}, ...
-    'VariableNames', {'L','alpha','beta','score','logLikStage1','file'});
+    'VariableNames', {'L','alpha','beta','validation_loss','logLikStage1','file'});
 
-best.score = inf;
-best.idx   = NaN;
+best.validation_loss = inf;
+best.idx             = NaN;
 
 for ff = 1:numel(files)
     S = files(ff);
     load(fullfile(S.folder, S.name), 'gamma_hat','log_lik','L','alpha','beta');
 
+    if beta ~= 1
+        continue
+    end
+
     % calculate validation score
-    score = Compute_validation_error( ...
+    validation_loss = Compute_validation_error( ...
         gamma_hat, L, Smooth_AllR, Smooth_AllR_RND, ...
         Realized_Return_back, Risk_Free_Rate_back, true, ...
         alpha, beta);
-    Results = [Results; {L, alpha, beta, score, log_lik, string(S.name)}]; %#ok<AGROW>
+    Results = [Results; {L, alpha, beta, validation_loss, log_lik, string(S.name)}]; %#ok<AGROW>
 
     % find best
-    if score < best.score
-        best.score = score;
+    if validation_loss < best.validation_loss
+        best.validation_loss = validation_loss;
         best.idx   = height(Results);
     end
 
-    fprintf('Checked: %-38s  L=%d  alpha=%.2f  beta=%.2f  score=%.4g\n', ...
-        S.name, L, alpha, beta, score);
+    fprintf('Checked: %-38s  L = %d  alpha = %.1f  beta = %.1f  validation_loss = %.4g\n', ...
+        S.name, L, alpha, beta, validation_loss);
 end
 
 % output
 if ~isempty(Results)
-    Results = sortrows(Results, 'score');
+    Results = sortrows(Results, 'validation_loss');
     disp(Results(1:min(10,height(Results)), :));
 
     b = Results(1,:);
-    fprintf('\nBest by validation: L=%d, alpha=%.3f, beta=%.3f, score=%.4g (stage1 logLik=%.4g)\n', ...
-        b.L, b.alpha, b.beta, b.score, b.logLikStage1);
+    fprintf('\nBest by validation:');
+    fprintf('\nL=%d, alpha=%.1f, beta=%.1f, validation_loss=%.4g (stage1 logLik=%.4g)\n', ...
+        b.L, b.alpha, b.beta, b.validation_loss, b.logLikStage1);
 
     save(fullfile(Path_Output, 'Stage2_validation_results.mat'), 'Results');
 else
