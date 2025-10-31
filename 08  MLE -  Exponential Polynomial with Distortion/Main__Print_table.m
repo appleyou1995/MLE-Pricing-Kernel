@@ -68,10 +68,17 @@ rows = [rows{:}];
 T = struct2table(rows);
 T = sortrows(T, {'alpha','beta'});
 T.alpha = round(T.alpha, 1);
+vars = T.Properties.VariableNames;
+for i = 1:numel(vars)
+    col = T.(vars{i});
+    if isnumeric(col)
+        T.(vars{i}) = round(col, 2);
+    end
+end
 
 % beta = 1
 T = T(T.beta == 1, :);
 
-% Output Excel
-out_xlsx = fullfile(folder, 'Stage1_MLE_estamation_summary.xlsx');
-writetable(T, out_xlsx, 'Sheet', 1);
+% Output csv
+out_csv = fullfile(folder, 'Stage1_MLE_estimation_summary.csv');
+writetable(T, out_csv);
