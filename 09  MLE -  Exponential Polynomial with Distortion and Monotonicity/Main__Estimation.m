@@ -46,16 +46,16 @@ clear Risk_Free_Rate_All years_to_merge data FileName input_filename year
 
 diff = 0.05;
 
-% alpha_min  = 0.7;
-% alpha_max  = 1.3;
 alpha_min  = 0.7;
-alpha_max  = 0.85;
+alpha_max  = 1.3;
+% alpha_min  = 1.05;
+% alpha_max  = 1.3;
 alpha_grid = alpha_min:diff:alpha_max;
 
 % beta_min  = 0.9;
 % beta_max  = 1.1;
-beta_min  = 1.0;
-beta_max  = 1.0;
+beta_min  = 1.05;
+beta_max  = 1.1;
 beta_grid = beta_min:diff:beta_max;
 
 
