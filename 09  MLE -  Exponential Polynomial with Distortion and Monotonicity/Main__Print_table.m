@@ -4,7 +4,7 @@ Path_MainFolder = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文�
 Path_Output = fullfile(Path_MainFolder, 'Code', '09  Output');
 
 
-%% 
+%% Add MLE log-likelihood
 
 function x = pick(v,i)
     if numel(v) >= i, x = v(i); else, x = NaN; end
@@ -26,15 +26,18 @@ for k = 1:numel(files)
     data = load(fullfile(files(k).folder, files(k).name), ...
                 'alpha','beta','L','gamma_hat','log_lik');
 
-    a = data.alpha; b = data.beta; L = data.L;
+    a = data.alpha;
+    b = data.beta;
+    L = data.L;
     g = data.gamma_hat(:)';
-    key = sprintf('a%.6f_b%.6f', a, b);
+    key = sprintf('a%.2f_b%.2f', a, b);
 
     if S.isKey(key)
         row = S(key);
     else
         row = init_row();
-        row.alpha = a; row.beta = b;
+        row.alpha = a;
+        row.beta  = b;
     end
 
     switch L
@@ -84,11 +87,74 @@ best1_alpha = T.alpha(idx1); best1_beta = T.beta(idx1);
 best2_alpha = T.alpha(idx2); best2_beta = T.beta(idx2);
 best3_alpha = T.alpha(idx3); best3_beta = T.beta(idx3);
 
+clc
 fprintf('\n=== Max loglik by L ===\n');
-fprintf('L = 1: alpha = %.2f, beta = %.2f, L1\\_loglik = %.2f\n', best1_alpha, best1_beta, best1);
-fprintf('L = 2: alpha = %.2f, beta = %.2f, L2\\_loglik = %.2f\n', best2_alpha, best2_beta, best2);
-fprintf('L = 3: alpha = %.2f, beta = %.2f, L3\\_loglik = %.2f\n', best3_alpha, best3_beta, best3);
+fprintf('L = 1: alpha = %.2f, beta = %.2f, loglik = %.2f\n', best1_alpha, best1_beta, best1);
+fprintf('L = 2: alpha = %.2f, beta = %.2f, loglik = %.2f\n', best2_alpha, best2_beta, best2);
+fprintf('L = 3: alpha = %.2f, beta = %.2f, loglik = %.2f\n', best3_alpha, best3_beta, best3);
 
-% Output csv
+
+%% Add GMM validation loss
+
+val_path = fullfile(folder, 'GMM_validation_results.mat');
+S2 = load(val_path);
+Results = S2.Results;
+Results = sortrows(Results, {'L','alpha','beta'});
+
+p = 2;
+T.alpha       = round(T.alpha, p);
+T.beta        = round(T.beta,  p);
+Results.alpha = round(Results.alpha, p);
+Results.beta  = round(Results.beta,  p);
+
+T.L1_validation_loss = NaN(height(T), 1);
+T.L2_validation_loss = NaN(height(T), 1);
+T.L3_validation_loss = NaN(height(T), 1);
+
+fixed_cols = T.Properties.VariableNames(1:2);
+other_cols = sort(T.Properties.VariableNames(3:end));
+T = T(:, [fixed_cols, other_cols]);
+
+for i = 1:height(Results)
+    L_i     = Results.L(i);
+    a_i     = Results.alpha(i);
+    b_i     = Results.beta(i);
+    v_loss  = Results.validation_loss(i);
+
+    idx = (T.alpha == a_i) & (T.beta == b_i);
+
+    switch L_i
+        case 1
+            T.L1_validation_loss(idx) = v_loss;
+        case 2
+            T.L2_validation_loss(idx) = v_loss;
+        case 3
+            T.L3_validation_loss(idx) = v_loss;
+    end
+end
+
+T.L1_validation_loss = round(T.L1_validation_loss, 8);
+T.L2_validation_loss = round(T.L2_validation_loss, 8);
+T.L3_validation_loss = round(T.L3_validation_loss, 8);
+
+[best1_val, idx1_val] = min(T.L1_validation_loss, [], 'omitnan');
+[best2_val, idx2_val] = min(T.L2_validation_loss, [], 'omitnan');
+[best3_val, idx3_val] = min(T.L3_validation_loss, [], 'omitnan');
+
+best1_alpha_val = T.alpha(idx1_val); best1_beta_val = T.beta(idx1_val);
+best2_alpha_val = T.alpha(idx2_val); best2_beta_val = T.beta(idx2_val);
+best3_alpha_val = T.alpha(idx3_val); best3_beta_val = T.beta(idx3_val);
+
+fprintf('\n=== Min validation loss by L ===\n');
+fprintf('L = 1: alpha = %.2f, beta = %.2f, validation_loss = %.8f\n', ...
+    best1_alpha_val, best1_beta_val, best1_val);
+fprintf('L = 2: alpha = %.2f, beta = %.2f, validation_loss = %.8f\n', ...
+    best2_alpha_val, best2_beta_val, best2_val);
+fprintf('L = 3: alpha = %.2f, beta = %.2f, validation_loss = %.8f\n', ...
+    best3_alpha_val, best3_beta_val, best3_val);
+
+
+%% Output csv
+
 out_csv = fullfile(folder, 'MLE_estimation_summary.csv');
 writetable(T, out_csv);
