@@ -299,8 +299,8 @@ end
 %% %% Plot M curve - construct select_rows [2 choose 1]
 
 % -------- User-specified (alpha, beta) by L --------
-alpha_val = 1.00;
-beta_val  = 1.10;
+alpha_val = 1.30;
+beta_val  = 0.90;
 
 targets = [
     struct('L', 1, 'alpha', alpha_val, 'beta', beta_val);
