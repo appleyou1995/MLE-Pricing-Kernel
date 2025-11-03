@@ -156,5 +156,11 @@ fprintf('L = 3: alpha = %.2f, beta = %.2f, validation_loss = %.8f\n', ...
 
 %% Output csv
 
+fmt = @(x) arrayfun(@(y) sprintf('%.2e', y), x, 'UniformOutput', false);
+
+T.L1_validation_loss = fmt(T.L1_validation_loss);
+T.L2_validation_loss = fmt(T.L2_validation_loss);
+T.L3_validation_loss = fmt(T.L3_validation_loss);
+
 out_csv = fullfile(folder, 'MLE_estimation_summary.csv');
 writetable(T, out_csv);
