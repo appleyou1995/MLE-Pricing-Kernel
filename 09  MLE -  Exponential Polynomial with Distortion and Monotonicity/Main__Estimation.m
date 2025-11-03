@@ -140,9 +140,9 @@ for ff = 1:numel(files)
     S = files(ff);
     load(fullfile(S.folder, S.name), 'gamma_hat','log_lik','L','alpha','beta');
 
-    if beta ~= 1
-        continue
-    end
+    % if beta ~= 1
+    %     continue
+    % end
 
     % calculate validation score
     validation_loss = Compute_validation_error( ...
@@ -168,10 +168,10 @@ if ~isempty(Results)
 
     b = Results(1,:);
     fprintf('\nBest by validation:');
-    fprintf('\nL=%d, alpha=%.2f, beta=%.2f, validation_loss=%.4g (stage1 logLik=%.4g)\n', ...
+    fprintf('\nL=%d, alpha=%.2f, beta=%.2f, validation_loss=%.4g (MLE logLik=%.4g)\n', ...
         b.L, b.alpha, b.beta, b.validation_loss, b.logLikStage1);
 
-    save(fullfile(Path_Output, 'Stage2_validation_results.mat'), 'Results');
+    save(fullfile(Path_Output, 'GMM_validation_results.mat'), 'Results');
 else
     warning('No Stage-1 result files found in %s', Path_Output);
 end
