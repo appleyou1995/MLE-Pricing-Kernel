@@ -48,13 +48,9 @@ diff = 0.05;
 
 alpha_min  = 0.7;
 alpha_max  = 1.3;
-% alpha_min  = 1.05;
-% alpha_max  = 1.3;
 alpha_grid = alpha_min:diff:alpha_max;
 
-% beta_min  = 0.9;
-% beta_max  = 1.1;
-beta_min  = 1.05;
+beta_min  = 0.9;
 beta_max  = 1.1;
 beta_grid = beta_min:diff:beta_max;
 
@@ -193,7 +189,7 @@ set(groot, 'defaultLineMarkerFaceColor','auto');
 %% Plot log-likelihood (Stage 1)
 
 clc
-figure('Position',[100 100 700 450]);
+figure('Position',[50 80 600 400]);
 hold on;
 
 files = dir(fullfile(Path_Output, 'MLE_gamma_L_*.mat'));
@@ -218,7 +214,7 @@ end
 T = array2table(data_all, 'VariableNames', {'L','alpha','beta','loglik'});
 
 % Filter beta = 1 only (if you want)
-T = T(T.beta == 1, :);
+T = T(T.beta == 0.9, :);
 
 % Plot by L
 unique_L = unique(T.L(~isnan(T.L)));
@@ -231,24 +227,25 @@ for i = 1:length(unique_L)
     loglik_sorted = T.loglik(idx);
     loglik_sorted = loglik_sorted(order);
 
-    plot(alpha_sorted, loglik_sorted, '--', 'LineWidth', 1.8, ...
+    plot(alpha_sorted, loglik_sorted, '-', 'LineWidth', 1.8, ...
         'DisplayName', sprintf('L = %d', L_i));
 end
 
 hold off;
 xlabel('$\alpha$', 'Interpreter', 'latex', 'FontSize', 14);
-ylabel('Stage-1 Log-Likelihood', 'FontSize', 14);
-legend('show', 'Location', 'best', 'Box', 'off', 'FontSize', 14);
+ylabel('Log-Likelihood', 'FontSize', 14);
+legend('show', 'Location', 'southeast', 'Box', 'off', 'FontSize', 14);
 grid on;
 
 set(gca, 'LooseInset', get(gca, 'TightInset'));
 
 alpha_min = min(T.alpha);
 alpha_max = max(T.alpha);
-xticks(linspace(alpha_min, alpha_max, 16));
+xticks(linspace(alpha_min, alpha_max, 13));
+xlim([alpha_min alpha_max]);
 
 % Output
-out_png = 'plot_logLikStage1_beta_1.png';
+out_png = 'plot_logLikStage1_beta_0.9.png';
 saveas(gcf, fullfile(Path_Output, out_png));
 
 
@@ -302,8 +299,8 @@ end
 %% %% Plot M curve - construct select_rows [2 choose 1]
 
 % -------- User-specified (alpha, beta) by L --------
-alpha_val = 0.95;
-beta_val  = 1.0;
+alpha_val = 1.0;
+beta_val  = 0.9;
 
 targets = [
     struct('L', 1, 'alpha', alpha_val, 'beta', beta_val);
@@ -410,6 +407,7 @@ figure('Position',[50 80 450 400]);
 layout = tiledlayout(1, 1, 'TileSpacing', 'Compact', 'Padding', 'None');
 nexttile;
 hold on;
+sp = 1;
 for L_i = 1:3
     row = select_rows{L_i};
 
