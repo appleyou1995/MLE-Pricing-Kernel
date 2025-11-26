@@ -10,7 +10,7 @@ Target_TTM = 30;
 
 % Load realized gross returns (R_{t+1})
 Path_Data_01 = fullfile(Path_Data, 'Code', '01  輸出資料');
-FileName = ['Realized_Return_TTM_', num2str(Target_TTM), '.csv'];
+FileName = ['Old_Realized_Return_TTM_', num2str(Target_TTM), '.csv'];
 Realized_Return = readtable(fullfile(Path_Data_01, FileName));
 
 % Load risk-free rate R_f^t
@@ -39,7 +39,7 @@ for year = years_to_merge
 end
 
 clear Path_Data_01 Path_Data_01_main Path_Data_02 Target_TTM
-clear Risk_Free_Rate_All years_to_merge data FileName input_filename year
+clear Risk_Free_Rate_All data FileName input_filename year
 
 
 %% Distortion Coefficient
@@ -56,6 +56,10 @@ beta_grid = beta_min:diff:beta_max;
 
 
 %% Split sample
+
+Tq = width(Smooth_AllR_RND);
+Realized_Return = Realized_Return(1:Tq, :);
+Risk_Free_Rate  = Risk_Free_Rate(1:Tq);
 
 T  = height(Realized_Return);
 
@@ -145,7 +149,7 @@ for ff = 1:numel(files)
     % end
 
     % calculate validation score
-    validation_loss = Compute_validation_error( ...
+    validation_loss = compute_validation_error( ...
         gamma_hat, L, Smooth_AllR, Smooth_AllR_RND, ...
         Realized_Return_back, Risk_Free_Rate_back, true, ...
         alpha, beta);
@@ -249,6 +253,33 @@ out_png = 'plot_logLikStage1_beta_0.9.png';
 saveas(gcf, fullfile(Path_Output, out_png));
 
 
+%% Plot log-likelihood (Stage 1) - 3D
+
+figure('Position',[50 80 700 500]);
+hold on;
+
+unique_L = unique(T.L(~isnan(T.L)));
+colors = lines(length(unique_L));
+
+for i = 1:length(unique_L)
+    L_i = unique_L(i);
+    idx = T.L == L_i;
+    scatter3(T.alpha(idx), T.beta(idx), T.loglik(idx), ...
+        60, 'filled', 'MarkerFaceColor', colors(i,:), ...
+        'DisplayName', sprintf('L = %d', L_i));
+end
+
+xlabel('$\alpha$', 'Interpreter', 'latex', 'FontSize', 14);
+ylabel('$\beta$', 'Interpreter', 'latex', 'FontSize', 14);
+zlabel('Log-Likelihood', 'FontSize', 14);
+title('Stage 1: Log-Likelihood Surface by L', 'FontSize', 14);
+
+legend('show', 'Location', 'best', 'Box', 'off', 'FontSize', 12);
+grid on;
+view(45,30);
+colormap('turbo');
+
+
 %% Plot validation_loss (Stage 2)
 
 figure('Position',[100 100 700 450]);
@@ -285,6 +316,66 @@ out_png = sprintf('plot_validation_loss_beta_1.png');
 saveas(gcf, fullfile(Path_Output, out_png));
 
 
+%% Plot validation_loss (Stage 2) - 3D
+
+figure('Position',[100 100 750 500]);
+hold on;
+
+L_values = unique(Results.L);
+colors = lines(length(L_values));
+
+for i = 1:length(L_values)
+    L_i = L_values(i);
+    idx = Results.L == L_i;
+
+    scatter3(Results.alpha(idx), Results.beta(idx), Results.validation_loss(idx), ...
+        70, 'filled', ...
+        'MarkerFaceColor', colors(i,:), ...
+        'DisplayName', sprintf('L = %d', L_i));
+end
+
+xlabel('$\alpha$', 'Interpreter', 'latex', 'FontSize', 14);
+ylabel('$\beta$', 'Interpreter', 'latex', 'FontSize', 14);
+zlabel('Validation Loss', 'FontSize', 14);
+title('Stage 2: Validation Loss Surface by L', 'FontSize', 14);
+
+legend('show', 'Location', 'northeastoutside', 'Box', 'off', 'FontSize', 12);
+grid on;
+view(45, 25);
+
+colormap('turbo');
+set(gca, 'LooseInset', get(gca, 'TightInset'));
+
+
+%% Plot M curve - Input of compute_M_curve
+
+% sample split
+Realized_Return_front = Realized_Return(1:T1, :);
+Realized_Return_back  = Realized_Return(idx_valid, :);
+Realized_Return_all   = Realized_Return;
+
+Risk_Free_Rate_front = Risk_Free_Rate(1:T1);
+Risk_Free_Rate_back  = Risk_Free_Rate(idx_valid);
+Risk_Free_Rate_all   = Risk_Free_Rate(:);
+
+dates       = Realized_Return.date;
+dates_front = dates(1:T1);
+dates_back  = dates(idx_valid);
+dates_all   = dates;
+
+samples = { ...
+    struct('name','Front sample','R',Realized_Return_front, ...
+                                 'Rf',Risk_Free_Rate_front, ...
+                                 'dates',dates_front), ...
+    struct('name','Back sample', 'R',Realized_Return_back , ...
+                                 'Rf',Risk_Free_Rate_back , ...
+                                 'dates',dates_back ), ...
+    struct('name','All sample' , 'R',Realized_Return, ...
+                                 'Rf',Risk_Free_Rate, ...
+                                 'dates',dates_all ) ...
+};
+
+
 %% Plot M curve - construct select_rows [2 choose 1]
 
 % -------- Find the smallest validation_loss --------
@@ -296,10 +387,10 @@ for L_i = 1:3
 end
 
 
-%% %% Plot M curve - construct select_rows [2 choose 1]
+%% Plot M curve - construct select_rows [2 choose 1]
 
 % -------- User-specified (alpha, beta) by L --------
-alpha_val = 1.30;
+alpha_val = 0.95;
 beta_val  = 0.90;
 
 targets = [
@@ -344,71 +435,21 @@ end
 
 clc
 
-% sample split
-Realized_Return_front = Realized_Return(1:T1, :);
-Realized_Return_back  = Realized_Return(idx_valid, :);
-Realized_Return_all   = Realized_Return;
-
-Risk_Free_Rate_front = Risk_Free_Rate(1:T1);
-Risk_Free_Rate_back  = Risk_Free_Rate(idx_valid);
-Risk_Free_Rate_all   = Risk_Free_Rate(:);
-
-dates       = Realized_Return.date;
-dates_front = dates(1:T1);
-dates_back  = dates(idx_valid);
-dates_all   = dates;
-
-samples = { ...
-    struct('name','Front sample','R',Realized_Return_front, ...
-                                 'Rf',Risk_Free_Rate_front, ...
-                                 'dates',dates_front), ...
-    struct('name','Back sample', 'R',Realized_Return_back , ...
-                                 'Rf',Risk_Free_Rate_back , ...
-                                 'dates',dates_back ), ...
-    struct('name','All sample' , 'R',Realized_Return, ...
-                                 'Rf',Risk_Free_Rate, ...
-                                 'dates',dates_all ) ...
-};
-
 % Add paths
 Path_Code_09 = fullfile(Path_MainFolder, 'Code', ...
     '09  MLE -  Exponential Polynomial with Distortion and Monotonicity');
 addpath(Path_Code_09);
-
-function [R_axis, M_bar] = compute_M_curve(gamma_hat, L, alpha, beta, ...
-    R_vec, Rf_vec, dates_vec, Smooth_AllR, Smooth_AllR_RND)
-
-    if istable(R_vec),     R_vec     = table2array(R_vec);     end
-    if istable(Rf_vec),    Rf_vec    = table2array(Rf_vec);    end
-    if istable(dates_vec), dates_vec = table2array(dates_vec); end
-
-    [~, delta_vec, M_vec] = log_likelihood_function( ...
-        gamma_hat, R_vec, Rf_vec, L, ...
-        Smooth_AllR, Smooth_AllR_RND, dates_vec, true, alpha, beta); %#ok<ASGLU>
-
-    R_axis = Smooth_AllR.(num2str(dates_vec(1)));
-    R_base = R_axis(:)';
-    N      = numel(R_base);
-
-    date_fields = arrayfun(@(d) num2str(d), dates_vec, 'UniformOutput', false);
-    T = numel(dates_vec);
-    M_interp = NaN(T, N);
-    for t = 1:T
-        R_t = Smooth_AllR.(date_fields{t});
-        M_t = M_vec(t, :);
-        M_interp(t, :) = interp1(R_t, M_t, R_base, 'pchip', NaN);
-    end
-    M_bar  = mean(M_interp, 1, 'omitnan');    
-end
-
 
 % plot
 figure('Position',[50 80 450 400]);
 layout = tiledlayout(1, 1, 'TileSpacing', 'Compact', 'Padding', 'None');
 nexttile;
 hold on;
-sp = 1;
-for L_i = 1:3
+
+sp = 3;  % All sample
+colors = get(groot, 'defaultAxesColorOrder');
+
+for L_i = 1:1
     row = select_rows{L_i};
 
     Sfile = fullfile(Path_Output, row.file);
@@ -422,8 +463,10 @@ for L_i = 1:3
         Smooth_AllR, Smooth_AllR_RND);
 
     plot(R_axis, M_bar, 'LineWidth', 1.8, ...
+        'Color', colors(L_i,:), ...
         'DisplayName', sprintf('$L=%d$', row.L));
 end
+
 hold off;
 xlabel('$R$'); ylabel('$E(M)$');
 legend('show','Location','northeast','Box','off');
@@ -434,3 +477,207 @@ set(gca,'LooseInset',get(gca,'TightInset'));
 % Output
 out_png = sprintf('plot_M_curve_alpha_%.2f_beta_%.2f.png', alpha_val, beta_val);
 saveas(gcf, fullfile(Path_Output, out_png));
+
+
+%% Compute risk preference indices and plot (given L, alpha, beta)
+
+clc
+Path_Output_Risk = fullfile(Path_MainFolder, 'Code', '09  Output - Risk Peference');
+
+% -------- Parameter sets (six cases) --------
+param_list = {
+    struct('L',1,'alpha',0.95,'beta',0.90)
+    struct('L',2,'alpha',1.00,'beta',0.90)
+    struct('L',3,'alpha',1.00,'beta',0.90)
+    struct('L',1,'alpha',1.00,'beta',1.00)
+    struct('L',2,'alpha',1.00,'beta',1.00)
+    struct('L',3,'alpha',1.00,'beta',1.00)
+};
+
+% -------- Prepare sample (All sample) --------
+R_all     = Realized_Return;
+Rf_all    = Risk_Free_Rate(:);
+dates_all = Realized_Return.date;
+
+% -------- Storage for all results --------
+all_results = cell(length(param_list),1);
+measures = {'ARA','RRA','AP','RP','AT','RT'};
+
+ymins = containers.Map();
+ymaxs = containers.Map();
+
+for k = 1:length(measures)
+    ymins(measures{k}) = +inf;
+    ymaxs(measures{k}) = -inf;
+end
+
+x_min = 0.8;
+x_max = 1.2;
+
+
+% ============================================================
+%  Step 1: Compute M and RiskPref index
+
+files = dir(fullfile(Path_Output, 'MLE_gamma_L_*.mat'));
+
+for idx = 1:length(param_list)
+
+    L_target     = param_list{idx}.L;
+    alpha_target = param_list{idx}.alpha;
+    beta_target  = param_list{idx}.beta;
+
+    % ----- Find file -----
+    chosen_file = '';
+    for f = 1:numel(files)
+        Sfile = fullfile(Path_Output, files(f).name);
+        S     = load(Sfile, 'L','alpha','beta','gamma_hat');
+
+        if S.L == L_target && S.alpha == alpha_target && S.beta == beta_target
+            chosen_file = files(f).name;
+            chosen      = S;
+            break;
+        end
+    end
+
+    if isempty(chosen_file)
+        error('MLE file not found for L=%d alpha=%.2f beta=%.2f', ...
+              L_target, alpha_target, beta_target);
+    end
+
+    fprintf('Loaded %s\n', chosen_file);
+
+
+    % ----- Compute M curve -----
+    [R_axis, M_bar] = compute_M_curve( ...
+        chosen.gamma_hat, L_target, alpha_target, beta_target, ...
+        R_all, Rf_all, dates_all, Smooth_AllR, Smooth_AllR_RND);
+
+    % ----- Compute six risk preference indices -----
+    [risk_pref, deriv] = compute_risk_pref_from_M(R_axis, M_bar);
+
+    % ----- 只在 R ∈ [0.8, 1.2] 的區間內收集 y-limits -----
+    R_axis_col = risk_pref.R_axis(:);
+    in_range   = (R_axis_col >= x_min) & (R_axis_col <= x_max);
+
+    % ----- Find y-limits -----
+    for m = 1:length(measures)
+        key = measures{m};
+        vec = risk_pref.(key);
+        vec = vec(:);
+        vec_sub = vec(in_range);
+
+        if ~isempty(vec_sub)
+            ymin_curr = min(vec_sub,[],'omitnan');
+            ymax_curr = max(vec_sub,[],'omitnan');
+
+            if ~isnan(ymin_curr)
+                ymins(key) = min(ymins(key), ymin_curr);
+            end
+            if ~isnan(ymax_curr)
+                ymaxs(key) = max(ymaxs(key), ymax_curr);
+            end
+        end
+    end
+
+    % ----- Keep -----
+    all_results{idx} = struct( ...
+        'L',L_target, 'alpha',alpha_target, 'beta',beta_target, ...
+        'R_axis',R_axis, 'M_bar',M_bar, ...
+        'risk_pref',risk_pref, 'deriv',deriv );
+end
+
+
+% ============================================================
+%  Step 2: Plot
+
+colors = get(groot, 'defaultAxesColorOrder');
+
+for idx = 1:length(param_list)
+
+    res = all_results{idx};
+    L_target     = res.L;
+    alpha_target = res.alpha;
+    beta_target  = res.beta;
+
+    alpha_str = sprintf('%.2f', alpha_target);
+    beta_str  = sprintf('%.2f', beta_target);
+
+    for m = 1:length(measures)
+
+        key    = measures{m};
+        vec    = res.risk_pref.(key);
+        R_axis = res.R_axis;
+
+        mask = (R_axis >= x_min) & (R_axis <= x_max);
+        R_plot = R_axis(mask);
+        Y_plot = vec(mask);
+
+        base_ymin = max(ymins(key), -2);
+        base_ymax = min(ymaxs(key), 15);
+        ylo = 0.95 * base_ymin;
+        yhi = 1.05 * base_ymax;
+
+        % 如果剛好 ylo == yhi（很罕見），給一點 buffer
+        if ylo == yhi
+            ylo = ylo - 1e-6;
+            yhi = yhi + 1e-6;
+        end
+
+        fig = figure('Position',[50 80 450 400]);
+        layout = tiledlayout(1, 1, 'TileSpacing', 'Compact', 'Padding', 'None');
+        nexttile;
+        hold on;
+        plot(R_plot, Y_plot, 'LineWidth', 1.5, ...
+            'Color', colors(L_target,:));
+        grid on;
+        hold off;
+
+        xlabel('$R$');
+        ylabel(key);
+
+        xlim([x_min x_max]);
+        ylim([ylo yhi]);
+
+        out_png = sprintf('%s_L_%d_alpha_%s_beta_%s.png', ...
+                          key, L_target, alpha_str, beta_str);
+
+        saveas(fig, fullfile(Path_Output_Risk, out_png));
+        close(fig);
+    end
+
+end
+
+
+%% Debug Table
+
+debug_L     = 3;
+debug_alpha = 1.00;
+debug_beta  = 0.90;
+
+% Generate debug table
+debug = make_debug_table(all_results, debug_L, debug_alpha, debug_beta, 1.10, 1.20);
+
+% Build filename
+alpha_str = sprintf('%.2f', debug_alpha);
+beta_str  = sprintf('%.2f', debug_beta);
+
+outname = sprintf('debug_L_%d_alpha_%s_beta_%s.csv', ...
+                  debug_L, alpha_str, beta_str);
+
+outfile = fullfile(Path_Output_Risk, outname);
+
+% Round all numeric variables to 4 decimals
+debug_rounded = debug;
+
+vars = debug.Properties.VariableNames;
+for i = 1:numel(vars)
+    col = debug.(vars{i});
+    if isnumeric(col)
+        debug_rounded.(vars{i}) = round(col, 4);
+    end
+end
+
+% Save CSV
+writetable(debug_rounded, outfile);
+
+fprintf('\nSaved rounded debug CSV:\n%s\n', outfile);
