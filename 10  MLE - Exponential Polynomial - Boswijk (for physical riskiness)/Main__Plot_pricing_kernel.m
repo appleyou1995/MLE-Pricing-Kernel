@@ -2,68 +2,7 @@ clear; clc;
 
 Path_MainFolder = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel';
 Path_Data = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\CDI Method';
-Path_Function = fullfile(Path_MainFolder, 'Code', '99  Function');
-
-
-%% Load the data
-
-addpath(Path_Function);
-[Risk_Free_Rate, Smooth_AllR, Smooth_AllR_RND] = load_general_data;
-
-
-%% [ 2 choose 1 ] Load estimation result - with delta
-
-Path_Output = fullfile(Path_MainFolder, 'Code', '07  Output - with delta');
-
-mat_files = dir(fullfile(Path_Output, 'MLE_gamma_max_L_*.mat'));
-
-for k = 1:length(mat_files)
-    file_path = fullfile(Path_Output, mat_files(k).name);
-    load(file_path, 'M_vec', 'delta_vec');
-    L_value = regexp(mat_files(k).name, '(?<=_L_)(\d+)', 'match', 'once');
-    var_name = ['M_vec_' L_value];
-    assignin('base', var_name, M_vec);
-    assignin('base', ['delta_vec_' L_value], delta_vec);
-end
-
-M_all = {M_vec_1, M_vec_2, M_vec_3};
-delta_all = {delta_vec_1, delta_vec_2, delta_vec_3};
-
-clear file_path L_value var_name k M_vec delta_vec mat_files
-
-
-%% [ 2 choose 1 ] Load estimation result - without delta
-
-Path_Output = fullfile(Path_MainFolder, 'Code', '07  Output - without delta');
-
-mat_files = dir(fullfile(Path_Output, 'MLE_gamma_max_L_*.mat'));
-
-for k = 1:length(mat_files)
-    file_path = fullfile(Path_Output, mat_files(k).name);
-    load(file_path, 'M_vec');
-    L_value = regexp(mat_files(k).name, '(?<=_L_)(\d+)', 'match', 'once');
-    var_name = ['M_vec_' L_value];
-    assignin('base', var_name, M_vec);
-end
-
-M_all = {M_vec_1, M_vec_2, M_vec_3};
-
-clear file_path L_value var_name k M_vec mat_files
-
-
-%% Print table
-
-addpath(Path_Function);
-Tcmd = build_MLE_summary_Boswijk(Path_Output);
-
-
-%% Setting
-
-max_L_list = [1, 2, 3];
-date_fields = Smooth_AllR.Properties.VariableNames;
-R_base = Smooth_AllR.(date_fields{1});
-T = numel(date_fields);
-N = numel(R_base);
+Path_Output = fullfile(Path_MainFolder, 'Code', '10  Output');
 
 
 %% Plot setting
@@ -74,44 +13,81 @@ set(groot, 'defaultTextInterpreter', 'latex');
 set(groot, 'defaultLegendInterpreter', 'latex');
 
 
-%% Plot Average Pricing Kernel (Full Range)
+%% Grid setting
 
-addpath(Path_Function);
+x_min = 0.8;
+x_max = 1.2;
 
-plot_Average_Pricing_Kernel_Full_Range_3_subplot( ...
-    Smooth_AllR, M_all, max_L_list, R_base, ...
-    'XLim', [0 3], ...
-    'YLim', [0 20], ...
-    'Path_Output', Path_Output);
+TTM_list = [30, 60, 90, 180];
+R_axis = (x_min : 0.001 : x_max)';
+N = numel(R_axis);
 
-
-%% Plot Average Pricing Kernel
-
-addpath(Path_Function);
-
-plot_Average_Pricing_Kernel(Smooth_AllR, M_all, max_L_list, R_base, ...
-    'XLim', [0.8 1.2], ...
-    'YLim', [0.6 2.1], ...
-    'Path_Output', Path_Output);
+M_avg_allTTM = NaN(numel(TTM_list), N);
 
 
-%% Plot Average Pricing Kernel with Interval
+%% Load estimation result and construct M curve
 
-addpath(Path_Function);
+for i = 1:numel(TTM_list)
 
-plot_Average_Pricing_Kernel_Extreme_Interval_3_subplot( ...
-    Smooth_AllR, M_all, max_L_list, R_base, ...
-    'XLim', [0.8 1.2], ...
-    'YLim', [0.99 1.01], ...
-    'LowerPct', 1, ...
-    'UpperPct', 99, ...
-    'Path_Output', Path_Output);
+    TTM = TTM_list(i);
+    FileName = fullfile(Path_Output, sprintf('MLE_gamma_TTM_%d_L_%d.mat', TTM, 1));
+
+    if ~isfile(FileName)
+        warning('File not found: %s', FileName);
+        continue;
+    end
+
+    S = load(FileName);
+
+    gamma_hat = S.gamma_hat(:);                                            % L×1
+    kappa_vec = S.kappa_vec(:);                                            % T×1
+    L         = numel(gamma_hat);
+    T         = numel(kappa_vec);
+
+    % ---- Step 1 ----
+    logR = log(R_axis);                                                    % N×1
+    poly_sum = zeros(N,1);
+    for l = 1:L
+        poly_sum = poly_sum + gamma_hat(l) .* (logR.^l);
+    end
+    % poly_sum: N×1
+
+    % ---- Step 2 ----
+    % logM_tR = κ_t - poly_sum(R)
+    logM_all = kappa_vec * ones(1, N) - ones(T,1) * poly_sum.';            % T×N
+    M_all    = exp(logM_all);                                              % T×N
+
+    % ---- Step 3 ----
+    M_avg = mean(M_all, 1);                                                % 1×N
+    M_avg_allTTM(i, :) = M_avg;
+
+end
 
 
-%% Plot delta_t Time Series (MLE)
+%% Plot
 
-addpath(Path_Function);
+fig = figure('Position',[200 200 550 450]);
+tiledlayout(1, 1, 'TileSpacing', 'Compact', 'Padding', 'None');
+nexttile;
+hold on; grid on;
 
-[fig, ~] = plot_Delta_Time_Series_MLE( ...
-    date_fields, delta_all, max_L_list, ...
-    'Path_Output', Path_Output);
+colors = lines(numel(TTM_list));
+
+for i = 1:numel(TTM_list)
+    if all(isnan(M_avg_allTTM(i,:)))
+        continue;
+    end
+    plot(R_axis, M_avg_allTTM(i, :), 'LineWidth', 1.5, ...
+        'Color', colors(i,:));
+end
+
+xlim([x_min x_max]);
+ylim([0.65 1.65]);
+xlabel('Gross return $R_{t+1}$');
+ylabel('Average pricing kernel $\bar{M}(R)$');
+legend({'TTM = 30', 'TTM = 60', 'TTM = 90', 'TTM = 180'}, ...
+       'Location','best','Box','off');
+
+hold off;
+
+saveas(fig, fullfile(Path_Output, 'Figure_Avg_Pricing_Kernel.png'));
