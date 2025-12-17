@@ -6,7 +6,7 @@ Path_MainFolder = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文�
 Path_Data = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\CDI Method';
 
 % Set TTM to check
-Target_TTM = 180; 
+Target_TTM = 30; 
 L = 1;
 
 
@@ -140,3 +140,32 @@ else
 end
 
 saveas(gcf, fullfile(Path_Output, sprintf('Figure_Check_Rf_Consistency_TTM_%d.png', Target_TTM)));
+
+
+%% 6. RND Martingale Check
+
+% 檢查用 trapz 算出來的 E^Q[R] 是否等於 Rf
+% 如果 Ratio < 1，代表積分範圍被截斷了（漏掉右尾）
+
+Martingale_Ratio = zeros(T, 1);
+for t = 1:T
+    date_str = num2str(dates(t));
+    R_axis = Smooth_AllR.(date_str);
+    f_star = Smooth_AllR_RND.(date_str);
+    
+    % E^Q[R]
+    EQ_R = trapz(R_axis, R_axis .* f_star);
+    
+    % Compare E^Q[R] and Rf
+    Martingale_Ratio(t) = EQ_R / Risk_Free_Rate(t);
+end
+
+figure;
+plot(plot_dates, Martingale_Ratio, 'k');
+yline(1, 'r--');
+title(sprintf('Martingale Test: E^Q[R] / R_f (TTM=%d)', Target_TTM));
+ylabel('Ratio (Should be 1)');
+ylim([0.97, 1.02]);
+grid on;
+
+saveas(gcf, fullfile(Path_Output, sprintf('Figure_Check_RND_Martingale_TTM_%d.png', Target_TTM)));
