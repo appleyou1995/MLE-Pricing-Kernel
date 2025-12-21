@@ -72,12 +72,9 @@ vars = T.Properties.VariableNames;
 for i = 1:numel(vars)
     col = T.(vars{i});
     if isnumeric(col)
-        T.(vars{i}) = round(col, 2);
+        T.(vars{i}) = round(col, 4);
     end
 end
-
-% beta = 1
-% T = T(T.beta == 1, :);
 
 [best1, idx1] = max(T.L1_loglik, [], 'omitnan');
 [best2, idx2] = max(T.L2_loglik, [], 'omitnan');
@@ -89,9 +86,9 @@ best3_alpha = T.alpha(idx3); best3_beta = T.beta(idx3);
 
 clc
 fprintf('\n=== Max loglik by L ===\n');
-fprintf('L = 1: alpha = %.2f, beta = %.2f, loglik = %.2f\n', best1_alpha, best1_beta, best1);
-fprintf('L = 2: alpha = %.2f, beta = %.2f, loglik = %.2f\n', best2_alpha, best2_beta, best2);
-fprintf('L = 3: alpha = %.2f, beta = %.2f, loglik = %.2f\n', best3_alpha, best3_beta, best3);
+fprintf('L = 1: alpha = %.2f, beta = %.2f, loglik = %.4f\n', best1_alpha, best1_beta, best1);
+fprintf('L = 2: alpha = %.2f, beta = %.2f, loglik = %.4f\n', best2_alpha, best2_beta, best2);
+fprintf('L = 3: alpha = %.2f, beta = %.2f, loglik = %.4f\n', best3_alpha, best3_beta, best3);
 
 
 %% Output csv
