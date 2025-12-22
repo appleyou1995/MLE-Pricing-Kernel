@@ -121,7 +121,7 @@ measures = {'ARA','RRA','AP','RP','AT','RT'};
 
 x_min = 0.3;
 x_max = 3.0;
-num_points = 10000;
+num_points = 5000;
 
 R_axis = linspace(x_min, x_max, num_points)';
 x      = log(R_axis);
