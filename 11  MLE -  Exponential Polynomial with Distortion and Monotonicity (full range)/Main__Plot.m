@@ -132,7 +132,8 @@ files = dir(fullfile(Path_Output, 'MLE_gamma_L_*.mat'));
 % ============================================================
 %  Main Loop
 % ============================================================
-for idx = 1:length(param_list)
+% for idx = 1:length(param_list)
+for idx = 3
     L_target     = param_list{idx}.L;
     alpha_target = param_list{idx}.alpha;
     beta_target  = param_list{idx}.beta;
@@ -244,7 +245,7 @@ for idx = 1:length(param_list)
     
     varNames = T_out.Properties.VariableNames;
     for v = 1:numel(varNames)
-        T_out.(varNames{v}) = round(T_out.(varNames{v}), 6);
+        T_out.(varNames{v}) = round(T_out.(varNames{v}), 8);
     end
     
     alpha_str = sprintf('%.2f', alpha_target);
