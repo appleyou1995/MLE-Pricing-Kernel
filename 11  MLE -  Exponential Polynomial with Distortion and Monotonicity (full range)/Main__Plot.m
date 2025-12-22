@@ -240,7 +240,7 @@ for idx = 1:length(param_list)
                    'VariableNames', {'R', 'M', 'M1', 'M2', 'M3', ...
                                      'ARA', 'RRA', 'AP', 'RP', 'AT', 'RT'});
     
-    mask = (R_axis >= 1.16) & (R_axis <= 1.2);
+    mask = (R_axis >= 1.165) & (R_axis <= 1.2);
     T_out = T_full(mask, :);
     
     varNames = T_out.Properties.VariableNames;
@@ -280,10 +280,10 @@ for idx = 1:length(param_list)
         switch key
             case 'ARA', y_limits = [0, 4.5]; 
             case 'RRA', y_limits = [0, 3.6];
-            case 'AP',  y_limits = [-10, 100];
-            case 'RP',  y_limits = [-10, 100];
-            case 'AT',  y_limits = [-10, 100];
-            case 'RT',  y_limits = [-10, 100];
+            case 'AP',  y_limits = [0, 16];
+            case 'RP',  y_limits = [0, 16];
+            case 'AT',  y_limits = [0, 16];
+            case 'RT',  y_limits = [0, 16];
             otherwise,  axis tight; y_limits = ylim;
         end
         ylim(y_limits);
