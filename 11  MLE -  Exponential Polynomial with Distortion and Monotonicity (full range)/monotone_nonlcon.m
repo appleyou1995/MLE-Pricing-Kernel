@@ -1,10 +1,9 @@
 function [c, ceq] = monotone_nonlcon(gamma, L, R_min, R_max)
     
     % 1. 建立檢查點 (Grid Points)
-    % 直接在全域範圍切 100 個點
-    num_check_points = 100;
+    num_check_points = 5000;
     R_grid = linspace(R_min, R_max, num_check_points)'; 
-    x_grid = log(R_grid); % 轉換成 log-return 空間
+    x_grid = log(R_grid);
     
     % 2. 計算多項式的「斜率」 (Derivative of Polynomial)
     % 向量化寫法：
@@ -31,7 +30,7 @@ function [c, ceq] = monotone_nonlcon(gamma, L, R_min, R_max)
     % 我們要求 Slope >= 0 (即 Slope >= tol)
     % 轉換為： tol - Slope <= 0
     
-    tol = 1e-6; 
+    tol = 1e-7; 
     c = tol - Slope; % 如果 Slope < tol，c 就會變成正的 -> 違反限制
     ceq = [];
 end

@@ -240,7 +240,7 @@ for idx = 3
                    'VariableNames', {'R', 'M', 'M1', 'M2', 'M3', ...
                                      'ARA', 'RRA', 'AP', 'RP', 'AT', 'RT'});
     
-    mask = (R_axis >= 1.16) & (R_axis <= 1.19);
+    mask = (R_axis >= 1.16) & (R_axis <= 1.2);
     T_out = T_full(mask, :);
     
     varNames = T_out.Properties.VariableNames;

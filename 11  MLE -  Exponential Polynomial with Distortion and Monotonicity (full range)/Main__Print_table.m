@@ -65,7 +65,6 @@ clear k data a b L key row files
 rows = values(S);
 rows = [rows{:}];
 T = struct2table(rows);
-T = sortrows(T, {'alpha','beta'});
 T.alpha = round(T.alpha, 2);
 T.beta  = round(T.beta,  2);
 vars = T.Properties.VariableNames;
@@ -75,6 +74,7 @@ for i = 1:numel(vars)
         T.(vars{i}) = round(col, 4);
     end
 end
+T = sortrows(T, {'alpha','beta'});
 
 [best1, idx1] = max(T.L1_loglik, [], 'omitnan');
 [best2, idx2] = max(T.L2_loglik, [], 'omitnan');
