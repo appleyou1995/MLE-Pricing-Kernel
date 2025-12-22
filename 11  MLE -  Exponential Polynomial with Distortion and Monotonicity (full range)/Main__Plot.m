@@ -133,7 +133,7 @@ files = dir(fullfile(Path_Output, 'MLE_gamma_L_*.mat'));
 %  Main Loop
 % ============================================================
 % for idx = 1:length(param_list)
-for idx = 3
+for idx = 1:length(param_list)
     L_target     = param_list{idx}.L;
     alpha_target = param_list{idx}.alpha;
     beta_target  = param_list{idx}.beta;
