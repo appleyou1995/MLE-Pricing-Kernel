@@ -7,7 +7,7 @@ Path_Data = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\
 %% Load the data
 
 % Target_TTM = [30, 60, 90, 180]
-Target_TTM = 30;
+Target_TTM = 180;
 
 % Load risk-free rate R_f^t
 Path_Data_01 = fullfile(Path_Data, 'Code', '01  輸出資料');
@@ -72,7 +72,7 @@ max_L = 1;
 for L = 1:max_L
     fprintf('\n--- Estimating MLE with kappa, TTM = %d ---\n', Target_TTM);
 
-    [gamma_hat, log_lik, kappa_vec, M_cell] = MLE_gamma_estimation( ...
+    [gamma_hat, log_lik, kappa_vec, M_cell] = MLE_gamma_estimation_Par( ...
         Smooth_AllR, Smooth_AllR_RND, Realized_Return, Risk_Free_Rate, L);
 
     OutputFile = fullfile(Path_Output, sprintf('MLE_gamma_TTM_%d_L_%d.mat', Target_TTM, L));

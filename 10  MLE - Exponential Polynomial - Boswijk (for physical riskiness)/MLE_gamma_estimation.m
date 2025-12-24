@@ -31,9 +31,9 @@ function [gamma_hat, log_lik, kappa_vec, M_cell] = MLE_gamma_estimation( ...
     log_lik = -neg_LL;
 
     % Check optimization result
-    if     exitflag > 0,  disp('✅ fmincon converged successfully.');
-    elseif exitflag == 0, disp('⚠️ fmincon reached the iteration limit.');
-    else,                 disp(['❌ fmincon failed. Exit flag: ', num2str(exitflag)]);
+    if     exitflag > 0,  disp('fmincon converged successfully.');
+    elseif exitflag == 0, disp('fmincon reached the iteration limit.');
+    else,                 disp(['fmincon failed. Exit flag: ', num2str(exitflag)]);
     end
     
     % Display output
@@ -86,8 +86,22 @@ function [LL, kappa_vec, M_cell] = log_likelihood_function(param, R_vec, Rf_vec,
         
 
         % === Step 3: Compute kappa_t if enabled ===
-        integrand    = f_star_curve .* exp(poly_sum);                      % (1*N_t)
-        integral_val = trapz(R_axis, integrand);                           % (1*1)
+
+        % 3.1 Uncorrected Integral
+        integrand_raw    = f_star_curve .* exp(poly_sum);                  % (1*N_t)
+        integral_val_raw = trapz(R_axis, integrand_raw);                   % (1*1)
+
+        % 3.2 Bias Check
+        EQ_R_biased = trapz(R_axis, f_star_curve .* R_axis);
+
+        % 3.3 Correction Ratio
+        % Refined_Density = Ratio * Original_Density
+        Correction_Ratio = Rf_t / EQ_R_biased;
+
+        % 3.4 Linear Scaling
+        integral_val = integral_val_raw * Correction_Ratio;
+        
+        % 3.5 kappa
         kappa_t      = -log(Rf_t) + log(integral_val);                     % (1*1)
         kappa_vec(t) = kappa_t;
 

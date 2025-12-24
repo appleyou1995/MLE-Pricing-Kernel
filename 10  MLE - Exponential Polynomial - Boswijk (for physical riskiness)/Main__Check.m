@@ -79,12 +79,40 @@ for t = 1:T
     R_axis = Smooth_AllR.(date_str);
     f_star_curve = Smooth_AllR_RND.(date_str);
     
-    % 4.2 Compute polynomial part (When L=1, poly_sum = gamma * ln(R))
-    integrand = f_star_curve .* (R_axis .^ gamma);
-    integral_val = trapz(R_axis, integrand);
+    % 4.2 Compute polynomial part (Raw Integral)
+    % When L=1, R^gamma is equivalent to exp(gamma * ln(R))
+    integrand_raw = f_star_curve .* (R_axis .^ gamma); 
+    integral_val_raw = trapz(R_axis, integrand_raw);
     
+    % --- [新增] 加入與估計時一致的校正邏輯 ---
+    % 1. 計算原始數據隱含的期望值 (Bias Check)
+    EQ_R_biased = trapz(R_axis, f_star_curve .* R_axis);
+    
+    % 2. 計算校正因子 (Correction Ratio)
+    Rf_t = Risk_Free_Rate(t);
+    Correction_Ratio = Rf_t / EQ_R_biased;
+    
+    % 3. 應用校正 (得到 Refined Integral)
+    % 這是計算 kappa 時真正用到的數值
+    integral_val_refined = integral_val_raw * Correction_Ratio;
+    
+    % ---------------------------------------
+    % 應用理論下界強制修正 (Theoretical Floor)
+    if L == 1 && gamma > 1
+         Theoretical_Min_Integral = Rf_t ^ gamma;
+         
+         % 如果數值積分小於理論值，驗證時也要用理論值
+         if integral_val_refined < Theoretical_Min_Integral
+             integral_val_refined = Theoretical_Min_Integral;
+         end
+    end
+    % -----------------------
+
     % 4.3 Back-calculate Rf using the estimated kappa
-    Rf_Implied(t) = integral_val / exp(kappa_vec(t));
+    % kappa_t = -ln(Rf) + ln(Integral_Refined)
+    % => ln(Rf) = ln(Integral_Refined) - kappa_t
+    % => Rf = Integral_Refined / exp(kappa_t)
+    Rf_Implied(t) = integral_val_refined / exp(kappa_vec(t));
 end
 
 
@@ -101,8 +129,8 @@ nexttile;
 plot(x_num, Risk_Free_Rate, 'b-', 'LineWidth', 1.5); hold on;
 plot(x_num, Rf_Implied, 'r--', 'LineWidth', 1.5);
 
-title(sprintf('Check Consistency: True Rf vs. Implied Rf (TTM=%d)', Target_TTM));
-legend('True Rf (Input)', 'Implied Rf (Back-calculated from kappa)', 'Box', 'off');
+title(sprintf('Check Consistency: True $R_f$ vs. Implied $R_f$ (TTM=%d)', Target_TTM), 'Interpreter', 'latex');
+legend('True $R_f$ (Input)', 'Implied $R_f$ (Back-calculated from kappa)', 'Interpreter', 'latex', 'Box', 'off');
 ylabel('Gross Risk Free Rate');
 grid on;
 
@@ -119,7 +147,6 @@ plot(x_num, Difference, 'k');
 
 title('Difference (Implied - True)');
 ylabel('Error');
-xlabel('Year');
 grid on;
 
 % Set limits using numeric values
@@ -163,7 +190,7 @@ end
 figure;
 plot(plot_dates, Martingale_Ratio, 'k');
 yline(1, 'r--');
-title(sprintf('Martingale Test: E^Q[R] / R_f (TTM=%d)', Target_TTM));
+title(sprintf('Martingale Test: $E^Q[R] / R_f$ (TTM=%d)', Target_TTM), 'Interpreter', 'latex');
 ylabel('Ratio (Should be 1)');
 ylim([0.97, 1.02]);
 grid on;
