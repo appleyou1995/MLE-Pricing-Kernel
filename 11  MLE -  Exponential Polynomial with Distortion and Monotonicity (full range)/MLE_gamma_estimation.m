@@ -9,65 +9,50 @@ function [gamma_hat, log_lik, delta_vec, M_vec] = MLE_gamma_estimation( ...
     dates  = Realized_Return.date;
     R_vec  = Realized_Return.realized_ret;
     Rf_vec = Risk_Free_Rate;
-    
-    % Data Pre-processing
-    disp('Pre-processing data for parallel computing...');
-    T = length(dates);
-    R_grids_All = cell(T, 1);
-    f_star_All  = cell(T, 1);
-    
-    for t = 1:T
-        date_str = num2str(dates(t));
-        R_grids_All{t} = Smooth_AllR.(date_str);
-        f_star_All{t}  = Smooth_AllR_RND.(date_str);
-    end
 
-    % Initial guess
+    % --- [Step 1] Linear Inequality Constraints ---
+    Target_Points = 10002;
+    R_check = generate_non_uniform_grid(Global_Min_R, Global_Max_R, Target_Points);
+    x_check = log(R_check);
+    
+    % Basis Derivative Matrix
+    % SDF monotone decreasing => P'(ln R) > 0
+    % P'(x) = sum( l * gamma_l * x^(l-1) )
+    powers = 1:L;
+    % Basis_Derivative: l * x^(l-1) each row
+    Basis_Derivative = (x_check .^ (powers - 1)) .* powers;
+    
+    % A*x <= b
+    %  Basis_Derivative * gamma >= tol
+    % -Basis_Derivative * gamma <= -tol
+    tol_strict = 1e-7;
+    A_ineq = -Basis_Derivative;
+    b_ineq = -tol_strict * ones(size(R_check, 1), 1);
+
+    % --- [Step 2] Optimization Setup ---
     gamma0 = zeros(L,1);
-    LB = [];
-    UB = [];
-
+    
     % Optimization options
     options = optimoptions('fmincon', ...
-        'Display', 'iter-detailed', ...
+        'Display', 'off', ... 
         'Algorithm', 'sqp', ...
         'ConstraintTolerance', 1e-9, ...
         'StepTolerance', 1e-9, ...
-        'MaxFunctionEvaluations', 50000, ...
-        'SpecifyObjectiveGradient', false);
-
+        'MaxFunctionEvaluations', 50000);
+        
     % Define objective function
-    obj_fun = @(param) -log_likelihood_function_par(param, R_vec, Rf_vec, L, ...
-        R_grids_All, f_star_All, use_delta, alpha, beta);
-    % obj_fun = @(param) -log_likelihood_function(param, R_vec, Rf_vec, L, ...
-    %     Smooth_AllR, Smooth_AllR_RND, dates, use_delta, ...
-    %     alpha, beta);
-    
-    % Enforce M_grid decreasing on the FULL Range of R
-    nonlcon = @(g) monotone_nonlcon(g, L, Global_Min_R, Global_Max_R);
+    obj_fun = @(param) -log_likelihood_function(param, R_vec, Rf_vec, L, ...
+        Smooth_AllR, Smooth_AllR_RND, dates, use_delta, alpha, beta);
 
-    % Run optimization
-    if isempty(gcp('nocreate')), parpool; end
-    disp('Starting optimization with parallel computing...');
-    [gamma_hat, neg_LL, exitflag, ~] = fmincon( ...
-        obj_fun, gamma0, [], [], [], [], LB, UB, nonlcon, options);
-
+    % --- [Step 3] Run Optimization (Serial) ---
+    [gamma_hat, neg_LL, ~] = fmincon( ...
+        obj_fun, gamma0, A_ineq, b_ineq, [], [], [], [], [], options);
+        
     % Return log-likelihood (positive value)
     log_lik = -neg_LL;
-
-    % Check optimization result
-    if     exitflag > 0,  disp('fmincon converged successfully.');
-    elseif exitflag == 0, disp('fmincon reached the iteration limit.');
-    else,                 disp(['fmincon failed. Exit flag: ', num2str(exitflag)]);
-    end
     
-    % Display output
-    disp('Estimated coefficients:');
-    disp(gamma_hat);
-    disp(['Final log-likelihood = ', num2str(log_lik)]);
-
     % Post-estimation call
-    [~, delta_vec, M_vec] = log_likelihood_function_par(gamma_hat, R_vec, Rf_vec, L, ...
-        R_grids_All, f_star_All, use_delta, alpha, beta);
+    [~, delta_vec, M_vec] = log_likelihood_function(gamma_hat, R_vec, Rf_vec, L, ...
+        Smooth_AllR, Smooth_AllR_RND, dates, use_delta, alpha, beta);
 
 end

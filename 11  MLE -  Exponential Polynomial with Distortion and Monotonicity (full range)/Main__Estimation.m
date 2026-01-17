@@ -46,12 +46,12 @@ clear Risk_Free_Rate_All data FileName input_filename year
 
 diff = 0.05;
 
-alpha_min  = 0.9;
-alpha_max  = 1.0;
+alpha_min  = 0.7;
+alpha_max  = 1.3;
 alpha_grid = alpha_min:diff:alpha_max;
 
-beta_min  = 0.9;
-beta_max  = 1.0;
+beta_min  = 0.7;
+beta_max  = 1.1;
 beta_grid = beta_min:diff:beta_max;
 
 
@@ -89,7 +89,7 @@ Global_Max_R = Global_Max_R * 1.1;
 Path_Output = fullfile(Path_MainFolder, 'Code', '11  Output');
 
 
-%% Stage 1: MLE over (alpha, beta, L)
+%% Estimation: MLE over (alpha, beta, L)
 
 clc
 
@@ -106,28 +106,69 @@ Risk_Free_Rate_front  = Risk_Free_Rate(1:T1);
 max_L     = 3;
 use_delta = true;
 
+
+% 1. 建立任務列表 (Flatten loops)
+tasks = [];
+cnt = 1;
 for a = 1:length(alpha_grid)
     for b = 1:length(beta_grid)
-
-        alpha = alpha_grid(a);
-        beta  = beta_grid(b);
-
         for L = 1:max_L
-
-            outname = sprintf('MLE_gamma_L_%d_alpha_%.2f_beta_%.2f.mat', L, alpha, beta);
-            OutputFile = fullfile(Path_Output, outname);
-
-            fprintf('\n--- Estimating: L = %d, alpha = %.2f, beta = %.2f ---\n', L, alpha, beta);
-            t0 = tic;
-            [gamma_hat, log_lik, delta_vec, M_vec] = MLE_gamma_estimation( ...
-                Smooth_AllR, Smooth_AllR_RND, ...
-                Realized_Return_front, Risk_Free_Rate_front, ...
-                L, use_delta, alpha, beta, Global_Min_R, Global_Max_R);
-
-            save(OutputFile, 'gamma_hat', 'log_lik', 'L', 'alpha', 'beta');
-
-            elapsed = toc(t0);
-            fprintf('Saved: %s (logLik=%.4g, %.2fs)\n', outname, log_lik, elapsed);
+            tasks(cnt).alpha = alpha_grid(a);
+            tasks(cnt).beta  = beta_grid(b);
+            tasks(cnt).L     = L;
+            cnt = cnt + 1;
         end
     end
+end
+Total_Tasks = length(tasks);
+
+
+% 2. [關鍵優化] 建立 Constant 資料物件，避免 parfor 重複傳輸大資料
+Data_Const = parallel.pool.Constant(struct(...
+    'Smooth_AllR', Smooth_AllR, ...
+    'Smooth_AllR_RND', Smooth_AllR_RND, ...
+    'Realized_Return', Realized_Return_front, ...
+    'Risk_Free_Rate', Risk_Free_Rate_front, ...
+    'Global_Min_R', Global_Min_R, ...
+    'Global_Max_R', Global_Max_R));
+
+fprintf('開始執行 %d 個任務，使用 CPU 全速平行運算...\n', Total_Tasks);
+
+% 確保開啟 Parallel Pool
+if isempty(gcp('nocreate')), parpool; end
+
+
+% 3. 外層平行迴圈
+parfor i = 1:Total_Tasks
+    % 取出任務參數
+    L     = tasks(i).L;
+    alpha = tasks(i).alpha;
+    beta  = tasks(i).beta;
+    
+    outname = sprintf('MLE_gamma_L_%d_alpha_%.2f_beta_%.2f.mat', L, alpha, beta);
+    OutputFile = fullfile(Path_Output, outname);
+    
+    fprintf('Task Running: L=%d, a=%.2f, b=%.2f\n', L, alpha, beta);
+    
+    % 從 Constant 取出資料 (在此 Worker 內使用)
+    D = Data_Const.Value;
+    
+    t0 = tic;
+    % 呼叫估計函數 (注意：此函數內部不能再有 parfor)
+    [gamma_hat, log_lik, delta_vec, M_vec] = MLE_gamma_estimation( ...
+        D.Smooth_AllR, D.Smooth_AllR_RND, ...
+        D.Realized_Return, D.Risk_Free_Rate, ...
+        L, use_delta, alpha, beta, D.Global_Min_R, D.Global_Max_R);
+    
+    elapsed = toc(t0);
+    
+    % 使用輔助函數存檔
+    parsave_result(OutputFile, gamma_hat, log_lik, L, alpha, beta, elapsed);
+end
+
+disp('所有任務完成！');
+
+% --- 輔助函數：用於 parfor 內存檔 ---
+function parsave_result(fname, gamma_hat, log_lik, L, alpha, beta, elapsed)
+    save(fname, 'gamma_hat', 'log_lik', 'L', 'alpha', 'beta', 'elapsed');
 end
