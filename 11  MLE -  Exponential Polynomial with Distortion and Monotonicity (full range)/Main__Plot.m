@@ -1,8 +1,56 @@
 clear; clc;
 
-Path_MainFolder = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel';
+Path_MainFolder  = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel';
+Path_Data        = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\CDI Method';
 Path_Output      = fullfile(Path_MainFolder, 'Code', '11  Output');
 Path_Output_Plot = fullfile(Path_MainFolder, 'Code', '11  Output - Plot');
+
+
+%% Load the data
+
+Target_TTM = 30;
+
+% Load Q-measure PDF tables: R axis and corresponding f^*_t(R)
+Path_Data_02 = fullfile(Path_Data, 'Code', '02  輸出資料');
+Smooth_AllR = [];
+
+years_to_merge = 1996:2021;
+for year = years_to_merge
+    input_filename = fullfile(Path_Data_02, sprintf('TTM_%d_RND_Tables_%d.mat', Target_TTM, year));
+    if exist(input_filename, 'file')
+        data = load(input_filename);
+        Smooth_AllR = [Smooth_AllR, data.Table_Smooth_AllR];               %#ok<AGROW>
+    else
+        warning('File %s does not exist.', input_filename);
+    end
+end
+
+% Find the range of R_axis
+Global_Min_R = 100; 
+Global_Max_R = 0;
+fields = fieldnames(Smooth_AllR);
+for i = 1:numel(fields)
+    this_field = fields{i};    
+    if isempty(regexp(this_field, '^\d+$', 'once'))
+        continue; 
+    end    
+    r_grid = Smooth_AllR.(this_field);    
+    if ~isa(r_grid, 'double') || isempty(r_grid)
+        continue;
+    end    
+    Global_Min_R = min(Global_Min_R, min(r_grid));
+    Global_Max_R = max(Global_Max_R, max(r_grid));
+end
+Global_Min_R = Global_Min_R * 0.9; 
+Global_Max_R = Global_Max_R * 1.1;
+
+% Define R_axis
+Target_Points = 10002;
+R_axis = generate_non_uniform_grid(Global_Min_R, Global_Max_R, Target_Points);
+logR   = log(R_axis);
+
+clear Path_Data_02 Target_TTM data input_filename year i this_field fields
+
 
 %% Plot setting
 
@@ -55,10 +103,6 @@ for k = 1:numel(targets)
     select_rows{L_i} = table(L_i, a_tar, b_tar, string(chosen_file), ...
         'VariableNames', {'L','alpha','beta','file'});
 end
-
-% Define R_axis
-R_axis = linspace(0.3, 3.0, 10000)'; 
-logR   = log(R_axis);
 
 % plot
 figure('Position',[50 80 500 400]);
@@ -119,11 +163,9 @@ param_list = {
 
 measures = {'ARA','RRA','AP','RP','AT','RT'};
 
-x_min = 0.3;
-x_max = 3.0;
-num_points = 5000;
-
-R_axis = linspace(x_min, x_max, num_points)';
+% Define R_axis
+Target_Points = 10002;
+R_axis = generate_non_uniform_grid(Global_Min_R, Global_Max_R, Target_Points);
 x      = log(R_axis);
 
 file_cache = containers.Map();
@@ -240,7 +282,7 @@ for idx = 1:length(param_list)
                    'VariableNames', {'R', 'M', 'M1', 'M2', 'M3', ...
                                      'ARA', 'RRA', 'AP', 'RP', 'AT', 'RT'});
     
-    mask = (R_axis >= 1.165) & (R_axis <= 1.2);
+    mask = (R_axis >= 1.17) & (R_axis <= 1.18);
     T_out = T_full(mask, :);
     
     varNames = T_out.Properties.VariableNames;
@@ -280,10 +322,10 @@ for idx = 1:length(param_list)
         switch key
             case 'ARA', y_limits = [0, 4.5]; 
             case 'RRA', y_limits = [0, 3.6];
-            case 'AP',  y_limits = [0, 16];
-            case 'RP',  y_limits = [0, 16];
-            case 'AT',  y_limits = [0, 16];
-            case 'RT',  y_limits = [0, 16];
+            case 'AP',  y_limits = [0, 10];
+            case 'RP',  y_limits = [0, 10];
+            case 'AT',  y_limits = [0, 10];
+            case 'RT',  y_limits = [0, 10];
             otherwise,  axis tight; y_limits = ylim;
         end
         ylim(y_limits);
