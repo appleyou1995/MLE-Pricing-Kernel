@@ -28,28 +28,31 @@ end
 % Find the range of R_axis
 Global_Min_R = 100; 
 Global_Max_R = 0;
-fields = fieldnames(Smooth_AllR);
+fields = Smooth_AllR.Properties.VariableNames; 
+
 for i = 1:numel(fields)
-    this_field = fields{i};    
-    if isempty(regexp(this_field, '^\d+$', 'once'))
-        continue; 
-    end    
-    r_grid = Smooth_AllR.(this_field);    
-    if ~isa(r_grid, 'double') || isempty(r_grid)
-        continue;
-    end    
-    Global_Min_R = min(Global_Min_R, min(r_grid));
-    Global_Max_R = max(Global_Max_R, max(r_grid));
+    this_field = fields{i};
+    col_data = Smooth_AllR.(this_field); 
+    
+    if isnumeric(col_data) && ~isempty(col_data)
+        Global_Min_R = min(Global_Min_R, min(col_data));
+        Global_Max_R = max(Global_Max_R, max(col_data));
+    end
 end
 Global_Min_R = Global_Min_R * 0.9; 
 Global_Max_R = Global_Max_R * 1.1;
 
 % Define R_axis
+Path_Code_11 = fullfile(Path_MainFolder, 'Code', ...
+    '11  MLE -  Exponential Polynomial with Distortion and Monotonicity (full range)');
+addpath(Path_Code_11);
+
 Target_Points = 10002;
 R_axis = generate_non_uniform_grid(Global_Min_R, Global_Max_R, Target_Points);
 logR   = log(R_axis);
 
-clear Path_Data_02 Target_TTM data input_filename year i this_field fields
+clear Path_Data_02 Target_TTM data input_filename year
+clear col_data i this_field fields
 
 
 %% Plot setting
@@ -161,7 +164,7 @@ param_list = {
     struct('L',3,'alpha',1.00,'beta',1.00)
 };
 
-measures = {'ARA','RRA','AP','RP','AT','RT'};
+measures = {'ARA','RRA','AP','RP','AT','RT','A5','R5','A6','R6'};
 
 % Define R_axis
 Target_Points = 10002;
@@ -203,6 +206,8 @@ for idx = 1:length(param_list)
     P_prime        = zeros(size(x)); % P'(x)
     P_double_prime = zeros(size(x)); % P''(x)
     P_triple_prime = zeros(size(x)); % P'''(x)
+    P_quad_prime   = zeros(size(x)); % P''''(x)
+    P_penta_prime  = zeros(size(x)); % P'''''(x)
     
     for l = 1:L_target
         % P(x) = sum( gamma_l * x^l )
@@ -220,6 +225,16 @@ for idx = 1:length(param_list)
             % P'''(x)
             P_triple_prime = P_triple_prime + l * (l-1) * (l-2) * gamma_hat(l) * (x.^(l-3));
         end
+        
+        if l >= 4
+            % P''''(x)
+            P_quad_prime = P_quad_prime + l * (l-1) * (l-2) * (l-3) * gamma_hat(l) * (x.^(l-4));
+        end
+        
+        if l >= 5
+            % P'''''(x)
+            P_penta_prime = P_penta_prime + l * (l-1) * (l-2) * (l-3) * (l-4) * gamma_hat(l) * (x.^(l-5));
+        end
     end
     
     % The SDF level: M(R) = exp(-P(ln R))
@@ -229,9 +244,11 @@ for idx = 1:length(param_list)
     % --- Chain Rule Derivation for M derivatives ---
     % Let y = ln M = -P(x)
     % Derivatives of y w.r.t x:
-    y_x   = -P_prime;
-    y_xx  = -P_double_prime;
-    y_xxx = -P_triple_prime;
+    y_x     = -P_prime;
+    y_xx    = -P_double_prime;
+    y_xxx   = -P_triple_prime;
+    y_xxxx  = -P_quad_prime;
+    y_xxxxx = -P_penta_prime;
     
     % Derivatives of y w.r.t R (using Chain Rule):
     % y' = dy/dR = (dy/dx) * (1/R)
@@ -242,6 +259,14 @@ for idx = 1:length(param_list)
     
     % y''' = d^3y/dR^3
     y3 = (y_xxx - 3*y_xx + 2*y_x) ./ (R_axis.^3);
+
+    % y'''' (4th derivative of y w.r.t R)
+    % Coeffs: 1, -6, 11, -6
+    y4 = (y_xxxx - 6*y_xxx + 11*y_xx - 6*y_x) ./ (R_axis.^4);
+
+    % y''''' (5th derivative of y w.r.t R)
+    % Coeffs: 1, -10, 35, -50, 24
+    y5 = (y_xxxxx - 10*y_xxxx + 35*y_xxx - 50*y_xx + 24*y_x) ./ (R_axis.^5);
     
     % Calculate Absolute Derivatives M1, M2, M3
     % M1 = M'
@@ -252,25 +277,43 @@ for idx = 1:length(param_list)
     
     % M3 = M'''
     M3 = M_val .* (y3 + 3*y1.*y2 + y1.^3);
+
+    % M4 = M'''' (For 5th Order Index)
+    M4 = M_val .* (y4 + 4*y1.*y3 + 3*y2.^2 + 6*(y1.^2).*y2 + y1.^4);
+
+    % M5 = M''''' (For 6th Order Index)
+    term_5_1 = y5;
+    term_5_2 = 5 * y1 .* y4;
+    term_5_3 = 10 * y2 .* y3;
+    term_5_4 = 10 * (y1.^2) .* y3;
+    term_5_5 = 15 * y1 .* (y2.^2);
+    term_5_6 = 10 * (y1.^3) .* y2;
+    term_5_7 = y1.^5;
+    M5 = M_val .* (term_5_1 + term_5_2 + term_5_3 + term_5_4 + term_5_5 + term_5_6 + term_5_7);
     
     % --- Risk Indices (Computed directly from M, M1, M2, M3) ---
     % 1. ARA = -M' / M
-    risk_pref.ARA = -M1 ./ M_val;
-    
-    % 2. RRA = R * ARA
+    %    RRA = R * ARA
+    risk_pref.ARA = -M1 ./ M_val;    
     risk_pref.RRA = R_axis .* risk_pref.ARA;
     
-    % 3. AP = -M'' / M'
-    risk_pref.AP  = -M2 ./ M1;
-    
-    % 4. RP = R * AP
+    % 2. AP = -M'' / M'
+    %    RP = R * AP
+    risk_pref.AP  = -M2 ./ M1;    
     risk_pref.RP  = R_axis .* risk_pref.AP;
     
-    % 5. AT = -M''' / M''
-    risk_pref.AT  = -M3 ./ M2;
-    
-    % 6. RT = R * AT
+    % 3. AT = -M''' / M''
+    %    RT = R * AT
+    risk_pref.AT  = -M3 ./ M2;    
     risk_pref.RT  = R_axis .* risk_pref.AT;
+
+    % 4. Order 5 (Edginess) -> Formula: -M'''' / M'''
+    risk_pref.A5  = -M4 ./ M3;
+    risk_pref.R5  = R_axis .* risk_pref.A5;
+    
+    % 5. Order 6 -> Formula: -M''''' / M''''
+    risk_pref.A6  = -M5 ./ M4;
+    risk_pref.R6  = R_axis .* risk_pref.A6;
     
     % ============================================================
     %  Output Data Table (Filtered & Formatted)
@@ -279,8 +322,11 @@ for idx = 1:length(param_list)
                    risk_pref.ARA, risk_pref.RRA, ...
                    risk_pref.AP, risk_pref.RP, ...
                    risk_pref.AT, risk_pref.RT, ...
+                   risk_pref.A5, risk_pref.R5, ...
+                   risk_pref.A6, risk_pref.R6, ...
                    'VariableNames', {'R', 'M', 'M1', 'M2', 'M3', ...
-                                     'ARA', 'RRA', 'AP', 'RP', 'AT', 'RT'});
+                                     'ARA', 'RRA', 'AP', 'RP', 'AT', 'RT', ...
+                                     'A5', 'R5', 'A6', 'R6'});
     
     mask = (R_axis >= 1.17) & (R_axis <= 1.18);
     T_out = T_full(mask, :);
@@ -326,6 +372,10 @@ for idx = 1:length(param_list)
             case 'RP',  y_limits = [0, 10];
             case 'AT',  y_limits = [0, 10];
             case 'RT',  y_limits = [0, 10];
+            case 'A5',  y_limits = [0, 16];
+            case 'R5',  y_limits = [0, 12];
+            case 'A6',  y_limits = [0, 16];
+            case 'R6',  y_limits = [0, 14];
             otherwise,  axis tight; y_limits = ylim;
         end
         ylim(y_limits);
