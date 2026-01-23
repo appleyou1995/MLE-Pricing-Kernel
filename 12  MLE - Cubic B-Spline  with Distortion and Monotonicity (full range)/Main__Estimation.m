@@ -70,18 +70,16 @@ idx_valid = 1:T;
 % Find the range of R_axis
 Global_Min_R = 100; 
 Global_Max_R = 0;
-fields = fieldnames(Smooth_AllR);
+fields = Smooth_AllR.Properties.VariableNames; 
+
 for i = 1:numel(fields)
-    this_field = fields{i};    
-    if isempty(regexp(this_field, '^\d+$', 'once'))
-        continue; 
-    end    
-    r_grid = Smooth_AllR.(this_field);    
-    if ~isa(r_grid, 'double') || isempty(r_grid)
-        continue;
-    end    
-    Global_Min_R = min(Global_Min_R, min(r_grid));
-    Global_Max_R = max(Global_Max_R, max(r_grid));
+    this_field = fields{i};
+    col_data = Smooth_AllR.(this_field); 
+    
+    if isnumeric(col_data) && ~isempty(col_data)
+        Global_Min_R = min(Global_Min_R, min(col_data));
+        Global_Max_R = max(Global_Max_R, max(col_data));
+    end
 end
 Global_Min_R = Global_Min_R * 0.9; 
 Global_Max_R = Global_Max_R * 1.1;
@@ -140,7 +138,7 @@ if isempty(gcp('nocreate')), parpool; end
 
 % 3. 外層平行迴圈
 parfor i = 1:Total_Tasks
-    
+
     % 取出任務參數
     b_val = tasks(i).b;
     alpha = tasks(i).alpha;

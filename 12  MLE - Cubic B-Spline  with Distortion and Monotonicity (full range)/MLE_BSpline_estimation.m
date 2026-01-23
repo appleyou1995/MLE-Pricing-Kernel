@@ -9,6 +9,7 @@ function [theta_hat, log_lik, delta_vec, M_vec] = MLE_BSpline_estimation( ...
     dates  = Realized_Return.date;
     R_vec  = Realized_Return.realized_ret;
     Rf_vec = Risk_Free_Rate;
+    months = Smooth_AllR.Properties.VariableNames;
     T      = length(R_vec);
 
     % --- [Step 1] Construct Knots & Precompute Basis ---
@@ -16,8 +17,8 @@ function [theta_hat, log_lik, delta_vec, M_vec] = MLE_BSpline_estimation( ...
     k_order   = n + 1;
     num_knots = n + b + 2;
     
-    min_knot = Global_Min_R * 0.95;
-    max_knot = Global_Max_R * 1.05;
+    min_knot = Global_Min_R;
+    max_knot = Global_Max_R;
     
     knots = linspace(min_knot, max_knot, num_knots);
     knots(1:(n+1))      = min_knot; 
@@ -27,19 +28,20 @@ function [theta_hat, log_lik, delta_vec, M_vec] = MLE_BSpline_estimation( ...
     Basis_Precomputed = cell(T, 1);
     
     for t = 1:T
-        date_str = num2str(dates(t));
-        if isfield(Smooth_AllR, date_str)
-            R_axis = Smooth_AllR.(date_str);
-            R_axis = R_axis(:); 
+        try
+            col_name = months{t};
+            R_axis = Smooth_AllR.(col_name);
             
-            % output size: (length(R_axis) x (b+1))
+            % 確保為行向量
+            R_axis = R_axis(:);
+            
+            % 計算 B-spline matrix
             B = spcol(knots, k_order, R_axis);
             
-            if any(isnan(B(:)))
-                 warning('NaN in B-spline basis at t=%d', t);
-            end
             Basis_Precomputed{t} = B;
-        else
+            
+        catch ME
+            warning('Error in precompute at t=%d (%s): %s', t, months{t}, ME.message);
             Basis_Precomputed{t} = [];
         end
     end
@@ -76,7 +78,7 @@ function [theta_hat, log_lik, delta_vec, M_vec] = MLE_BSpline_estimation( ...
         
     % Define objective function
     obj_fun = @(param) -log_likelihood_bspline(param, R_vec, Rf_vec, ...
-        Basis_Precomputed, Smooth_AllR, Smooth_AllR_RND, dates, use_delta, alpha, beta);
+        Basis_Precomputed, Smooth_AllR, Smooth_AllR_RND, months, use_delta, alpha, beta);
 
     % --- [Step 4] Run Optimization ---
     try
@@ -92,5 +94,5 @@ function [theta_hat, log_lik, delta_vec, M_vec] = MLE_BSpline_estimation( ...
     
     % Post-estimation call
     [~, delta_vec, M_vec] = log_likelihood_bspline(theta_hat, R_vec, Rf_vec, ...
-        Basis_Precomputed, Smooth_AllR, Smooth_AllR_RND, dates, use_delta, alpha, beta);
+        Basis_Precomputed, Smooth_AllR, Smooth_AllR_RND, months, use_delta, alpha, beta);
 end

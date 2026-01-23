@@ -1,7 +1,7 @@
 %% Log-Likelihood Function (Cubic B-Spline Version)
 
 function [LL, delta_vec, M_vec] = log_likelihood_bspline(theta, R_vec, Rf_vec, ...
-    Basis_Precomputed, Smooth_AllR, Smooth_AllR_RND, dates, use_delta, alpha, beta)
+    Basis_Precomputed, Smooth_AllR, Smooth_AllR_RND, months, use_delta, alpha, beta)
 
     T = length(R_vec);
     LL_contributions = zeros(T, 1);
@@ -15,8 +15,8 @@ function [LL, delta_vec, M_vec] = log_likelihood_bspline(theta, R_vec, Rf_vec, .
     end
     
     if nargout > 2
-        date_str_1 = num2str(dates(1));
-        temp_grid  = Smooth_AllR.(date_str_1);
+        col_name_1 = months{1};
+        temp_grid  = Smooth_AllR.(col_name_1);
         N_grid     = length(temp_grid);
         M_vec      = zeros(T, N_grid);
     else
@@ -28,20 +28,23 @@ function [LL, delta_vec, M_vec] = log_likelihood_bspline(theta, R_vec, Rf_vec, .
         % === Step 1: Basic inputs ===
         R_realized_t = R_vec(t);
         Rf_t         = Rf_vec(t);
-        date_str     = num2str(dates(t));
+        col_name     = months{t};
         
-        R_axis       = Smooth_AllR.(date_str);                             % (1 x N)
-        f_star_curve = Smooth_AllR_RND.(date_str);                         % (1 x N)
+        R_axis = Smooth_AllR.(col_name);
+        f_star_curve = Smooth_AllR_RND.(col_name);
         
-        B_mat = Basis_Precomputed{t};                                      % (N x (b+1))
+        B_mat = Basis_Precomputed{t};
         
-        if isempty(B_mat)
+        if isempty(R_axis) || isempty(f_star_curve) || isempty(B_mat)
              LL_contributions(t) = log(1e-12);
              continue; 
         end
+
+        R_axis = R_axis(:);
+        f_star_curve = f_star_curve(:);
         
         % === Step 2: Compute Spline Sum Q(R) ===
-        Spline_Sum = (B_mat * theta)';                                     % (1 x N)
+        Spline_Sum = (B_mat * theta);
         
         % 數值穩定控制 (避免 exp 爆掉)
         Spline_Sum = max(min(Spline_Sum, 60), -60);
@@ -56,6 +59,8 @@ function [LL, delta_vec, M_vec] = log_likelihood_bspline(theta, R_vec, Rf_vec, .
             delta_t = -log(Rf_t) + log(integral_val);
         else
             delta_t = 0;
+            integrand = f_star_curve .* exp(-Spline_Sum);
+            integral_val = 1;
         end
         
         if nargout > 1, delta_vec(t) = delta_t; end
@@ -67,7 +72,7 @@ function [LL, delta_vec, M_vec] = log_likelihood_bspline(theta, R_vec, Rf_vec, .
         M_grid = exp(logM);  
         
         if nargout > 2
-            M_vec(t, :) = M_grid;
+            M_vec(t, :) = M_grid';
         end
         
         % === Step 5: Evaluate f_t(R) (Eq 2) ===
