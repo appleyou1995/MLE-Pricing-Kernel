@@ -10,16 +10,29 @@ Path_Output_Plot = fullfile(Path_MainFolder, 'Code', '12  Output - Plot');
 
 Target_TTM = 30;
 
+% Load realized gross returns (R_{t+1})
+Path_Data_01 = fullfile(Path_Data, 'Code', '01  輸出資料');
+FileName = ['Old_Realized_Return_TTM_', num2str(Target_TTM), '.csv'];
+Realized_Return = readtable(fullfile(Path_Data_01, FileName));
+
+% Load risk-free rate R_f^t
+Path_Data_01_main = fullfile(Path_Data, 'Code', '01  原始資料處理');
+FileName = 'Risk_Free_Rate.csv';
+Risk_Free_Rate_All = readtable(fullfile(Path_Data_01_main, FileName));
+Risk_Free_Rate = Risk_Free_Rate_All.rf_gross_29d;
+
 % Load Q-measure PDF tables: R axis and corresponding f^*_t(R)
 Path_Data_02 = fullfile(Path_Data, 'Code', '02  輸出資料');
-Smooth_AllR = [];
+Smooth_AllR     = [];
+Smooth_AllR_RND = [];
 
 years_to_merge = 1996:2021;
 for year = years_to_merge
     input_filename = fullfile(Path_Data_02, sprintf('TTM_%d_RND_Tables_%d.mat', Target_TTM, year));
     if exist(input_filename, 'file')
         data = load(input_filename);
-        Smooth_AllR = [Smooth_AllR, data.Table_Smooth_AllR];               %#ok<AGROW>
+        Smooth_AllR     = [Smooth_AllR, data.Table_Smooth_AllR];           %#ok<AGROW>
+        Smooth_AllR_RND = [Smooth_AllR_RND, data.Table_Smooth_AllR_RND];   %#ok<AGROW>
     else
         warning('File %s does not exist.', input_filename);
     end
@@ -78,8 +91,8 @@ tol = 1e-9;
 files = dir(fullfile(Path_Output, 'MLE_BSpline_b_*.mat'));
 
 for k = 1:numel(targets)
-    b_tar = targets(k).b;
-    a_tar = targets(k).alpha;
+    beta_tar = targets(k).b;
+    alpha_tar = targets(k).alpha;
     beta_tar = targets(k).beta;
     
     chosen_file = '';
@@ -88,7 +101,7 @@ for k = 1:numel(targets)
             S = load(fullfile(Path_Output, files(f).name), 'b_val','alpha','beta','theta_hat');
         catch, continue; end
         
-        if S.b_val == b_tar && abs(S.alpha - a_tar) <= tol && abs(S.beta - beta_tar) <= tol
+        if S.b_val == beta_tar && abs(S.alpha - alpha_tar) <= tol && abs(S.beta - beta_tar) <= tol
             chosen_file = files(f).name;
             
             % --- 計算 M Curve ---
@@ -96,7 +109,7 @@ for k = 1:numel(targets)
             
             % 重建 Knots (邏輯需與估計程式一致)
             n         = 3; 
-            num_knots = n + b_tar + 2;
+            num_knots = n + beta_tar + 2;
             knots = linspace(Global_Min_R, Global_Max_R, num_knots);
             knots(1:(n+1))     = Global_Min_R;
             knots((end-n):end) = Global_Max_R;
@@ -112,12 +125,12 @@ for k = 1:numel(targets)
             M_curve = exp(Spline_Val);
             
             % 存起來畫圖用
-            plot_data = [plot_data; struct('b', b_tar, 'M', M_curve)]; %#ok<AGROW>
+            plot_data = [plot_data; struct('b', beta_tar, 'M', M_curve)]; %#ok<AGROW>
             break;
         end
     end
     if isempty(chosen_file)
-        warning('File not found for b=%d', b_tar);
+        warning('File not found for b=%d', beta_tar);
     end
 end
 
@@ -148,12 +161,8 @@ out_png = sprintf('plot_M_curve_BSpline_alpha_%.2f_beta_%.2f.png', alpha_val, be
 saveas(gcf, fullfile(Path_Output_Plot, out_png));
 
 
-%% Compute risk preference indices and plot
+%% Parameter sets
 
-clc
-colors = get(groot, 'defaultAxesColorOrder');
-
-% -------- Parameter sets (Modified for b) --------
 param_list = {
     struct('b',4,'alpha',0.95,'beta',0.90)
     struct('b',6,'alpha',1.00,'beta',0.90)
@@ -162,6 +171,12 @@ param_list = {
     struct('b',6,'alpha',1.00,'beta',1.00)
     struct('b',8,'alpha',1.00,'beta',1.00)
 };
+
+
+%% Compute risk preference indices and plot
+
+clc
+colors = get(groot, 'defaultAxesColorOrder');
 
 % 建議移除 A5, R5, A6, R6 (Cubic Spline 4階以上微分為0)
 measures = {'ARA','RRA','AP','RP','AT','RT','A5','R5','A6','R6'}; 
@@ -314,3 +329,99 @@ for idx = 1:length(param_list)
     end
 end
 fprintf('Done.\n');
+
+
+%% Compute delta_t and plot (given b, alpha, beta)
+
+clc
+colors = get(groot, 'defaultAxesColorOrder');
+files = dir(fullfile(Path_Output, 'MLE_BSpline_b_*.mat'));
+use_delta = true;
+
+months = Smooth_AllR.Properties.VariableNames;
+dates  = Realized_Return.date;
+date_objs = datetime(dates, 'ConvertFrom', 'yyyymmdd');
+
+for i = 1:length(param_list)
+    b_tar     = param_list{i}.b;
+    alpha_tar = param_list{i}.alpha;
+    beta_tar  = param_list{i}.beta;
+    
+    chosen_file = '';
+    theta_hat = [];
+    tol = 1e-9;
+    
+    for f = 1:numel(files)
+        Sfile = fullfile(Path_Output, files(f).name);
+        try
+            S_info = load(Sfile, 'b_val', 'alpha', 'beta'); 
+        catch
+            continue;
+        end
+        
+        if S_info.b_val == b_tar && abs(S_info.alpha - alpha_tar) < tol && abs(S_info.beta - beta_tar) < tol
+            chosen_file = files(f).name;
+            S_full = load(Sfile, 'theta_hat');
+            theta_hat = S_full.theta_hat;
+            break;
+        end
+    end
+    
+    if isempty(chosen_file)
+        warning('Case b=%d, alpha=%.2f, beta=%.2f not found. Skipping.', b_tar, alpha_tar, beta_tar);
+        continue;
+    end
+    
+    fprintf('Processing: b=%d, alpha=%.2f, beta=%.2f\n', b_tar, alpha_tar, beta_tar);
+    
+    T = length(Realized_Return.realized_ret);
+    Basis_Precomputed = cell(T, 1);
+    
+    % Knots
+    n         = 3;
+    k_order   = n + 1;
+    num_knots = n + b_tar + 2;
+    min_knot  = Global_Min_R;
+    max_knot  = Global_Max_R;
+    
+    knots = linspace(min_knot, max_knot, num_knots);
+    knots(1:(n+1))      = min_knot; 
+    knots((end-n):end)  = max_knot;
+    
+    % Basis Matrix
+    for t = 1:T
+        col_name = months{t};
+        R_axis_t = Smooth_AllR.(col_name);
+        R_axis_t = R_axis_t(:);
+        Basis_Precomputed{t} = spcol(knots, k_order, R_axis_t);
+    end
+
+    % --- Delta Time Series ---
+    [~, delta_vec, ~] = log_likelihood_bspline(theta_hat, ...
+        Realized_Return.realized_ret, Risk_Free_Rate, ...
+        Basis_Precomputed, ...
+        Smooth_AllR, Smooth_AllR_RND, ...
+        months, ...
+        use_delta, alpha_tar, beta_tar);
+    
+    % --- Plot ---
+    fig = figure('Position', [50 80 450 400], 'Visible', 'on');
+    
+    color_idx = b_tar/2 - 1;
+    plot(date_objs, delta_vec, 'LineWidth', 1.5, 'Color', colors(color_idx,:));
+    
+    datetick('x', 'yyyy', 'KeepTicks');
+    xlim([min(date_objs), max(date_objs)]);
+    
+    ylabel('$\delta_t$', 'Rotation', 0);
+    % ylim([0 1.56]);
+    grid on;
+    
+    set(gca, 'LooseInset', get(gca, 'TightInset'));
+    
+    out_name = sprintf('plot_delta_b_%d_alpha_%.2f_beta_%.2f.png', b_tar, alpha_tar, beta_tar);
+    saveas(fig, fullfile(Path_Output_Plot, out_name));
+    % close(fig);
+end
+
+fprintf('All delta plots completed.\n');
