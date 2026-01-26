@@ -10,16 +10,29 @@ Path_Output_Plot = fullfile(Path_MainFolder, 'Code', '11  Output - Plot');
 
 Target_TTM = 30;
 
+% Load realized gross returns (R_{t+1})
+Path_Data_01 = fullfile(Path_Data, 'Code', '01  輸出資料');
+FileName = ['Old_Realized_Return_TTM_', num2str(Target_TTM), '.csv'];
+Realized_Return = readtable(fullfile(Path_Data_01, FileName));
+
+% Load risk-free rate R_f^t
+Path_Data_01_main = fullfile(Path_Data, 'Code', '01  原始資料處理');
+FileName = 'Risk_Free_Rate.csv';
+Risk_Free_Rate_All = readtable(fullfile(Path_Data_01_main, FileName));
+Risk_Free_Rate = Risk_Free_Rate_All.rf_gross_29d;
+
 % Load Q-measure PDF tables: R axis and corresponding f^*_t(R)
 Path_Data_02 = fullfile(Path_Data, 'Code', '02  輸出資料');
-Smooth_AllR = [];
+Smooth_AllR     = [];
+Smooth_AllR_RND = [];
 
 years_to_merge = 1996:2021;
 for year = years_to_merge
     input_filename = fullfile(Path_Data_02, sprintf('TTM_%d_RND_Tables_%d.mat', Target_TTM, year));
     if exist(input_filename, 'file')
         data = load(input_filename);
-        Smooth_AllR = [Smooth_AllR, data.Table_Smooth_AllR];               %#ok<AGROW>
+        Smooth_AllR     = [Smooth_AllR, data.Table_Smooth_AllR];           %#ok<AGROW>
+        Smooth_AllR_RND = [Smooth_AllR_RND, data.Table_Smooth_AllR_RND];   %#ok<AGROW>
     else
         warning('File %s does not exist.', input_filename);
     end
@@ -149,12 +162,8 @@ out_png = sprintf('plot_M_curve_alpha_%.2f_beta_%.2f.png', alpha_val, beta_val);
 saveas(gcf, fullfile(Path_Output_Plot, out_png));
 
 
-%% Compute risk preference indices and plot (given L, alpha, beta)
+%% Parameter sets (six cases)
 
-clc
-colors = get(groot, 'defaultAxesColorOrder');
-
-% -------- Parameter sets (six cases) --------
 param_list = {
     struct('L',1,'alpha',0.95,'beta',0.90)
     struct('L',2,'alpha',0.95,'beta',0.90)
@@ -163,6 +172,12 @@ param_list = {
     struct('L',2,'alpha',1.00,'beta',1.00)
     struct('L',3,'alpha',1.00,'beta',1.00)
 };
+
+
+%% Compute risk preference indices and plot (given L, alpha, beta)
+
+clc
+colors = get(groot, 'defaultAxesColorOrder');
 
 measures = {'ARA','RRA','AP','RP','AT','RT','A5','R5','A6','R6'};
 
@@ -390,3 +405,69 @@ for idx = 1:length(param_list)
     end
 end
 fprintf('\nAll plots and tables completed.\n');
+
+
+%% Compute delta_t and plot (given L, alpha, beta)
+
+clc
+colors = get(groot, 'defaultAxesColorOrder');
+files = dir(fullfile(Path_Output, 'MLE_gamma_L_*.mat'));
+use_delta = true;
+dates = Realized_Return.date;
+date_objs = datetime(dates, 'ConvertFrom', 'yyyymmdd');
+
+for i = 1:length(param_list)
+    L_tar = param_list{i}.L;
+    a_tar = param_list{i}.alpha;
+    b_tar = param_list{i}.beta;
+    
+    % 4.1 尋找對應的 .mat 檔案
+    chosen_file = '';
+    gamma_hat = [];
+    tol = 1e-9;
+    
+    for f = 1:numel(files)
+        Sfile = fullfile(Path_Output, files(f).name);
+        S_info = load(Sfile, 'L', 'alpha', 'beta'); 
+        if S_info.L == L_tar && abs(S_info.alpha - a_tar) < tol && abs(S_info.beta - b_tar) < tol
+            chosen_file = files(f).name;
+            S_full = load(Sfile, 'gamma_hat');
+            gamma_hat = S_full.gamma_hat;
+            break;
+        end
+    end
+    
+    if isempty(chosen_file)
+        warning('Case L=%d, alpha=%.2f, beta=%.2f not found. Skipping.', L_tar, a_tar, b_tar);
+        continue;
+    end
+    
+    fprintf('Processing: L=%d, alpha=%.2f, beta=%.2f\n', L_tar, a_tar, b_tar);
+    
+    % 4.2 計算 Delta Time Series 
+    [~, delta_vec, ~] = log_likelihood_function(gamma_hat, ...
+        Realized_Return.realized_ret, Risk_Free_Rate, L_tar, ...
+        Smooth_AllR, Smooth_AllR_RND, dates, use_delta, a_tar, b_tar);
+    
+    % 4.3 繪圖
+    fig = figure('Position', [50 80 450 400], 'Visible', 'on');
+    plot(date_objs, delta_vec, 'LineWidth', 1.5, 'Color', colors(L_tar,:));
+    
+    % X 軸設定
+    datetick('x', 'yyyy', 'KeepTicks');
+    xlim([min(date_objs), max(date_objs)]);
+    
+    % Y 軸設定
+    ylabel('$\delta_t$', 'Rotation', 0);
+    ylim([-0.09 0.03]);
+    grid on;
+    
+    set(gca, 'LooseInset', get(gca, 'TightInset'));
+    
+    % 4.4 存檔
+    out_name = sprintf('plot_delta_L_%d_alpha_%.2f_beta_%.2f.png', L_tar, a_tar, b_tar);
+    saveas(fig, fullfile(Path_Output_Plot, out_name));
+    % close(fig);
+end
+
+fprintf('All delta plots completed.\n');
