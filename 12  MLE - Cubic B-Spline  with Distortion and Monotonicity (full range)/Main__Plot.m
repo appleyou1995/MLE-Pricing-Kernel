@@ -264,9 +264,14 @@ for idx = 1:length(param_list)
                                      'ARA', 'RRA', 'AP', 'RP', 'AT', 'RT', ...
                                      'A5', 'R5', 'A6', 'R6'});
     
-    % Filter for saving CSV (around ATM)
+    % Filter for saving CSV
     mask_csv = (R_axis >= 1.09) & (R_axis <= 1.11);
     T_save = T_out(mask_csv, :);
+
+    varNames = T_save.Properties.VariableNames;
+    for v = 1:numel(varNames)
+        T_save.(varNames{v}) = round(T_save.(varNames{v}), 8);
+    end
     
     csv_name = sprintf('RiskTable_b_%d_alpha_%.2f_beta_%.2f.csv', b_target, alpha_target, beta_target);
     writetable(T_save, fullfile(Path_Output, csv_name));
