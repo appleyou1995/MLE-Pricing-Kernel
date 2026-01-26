@@ -163,8 +163,8 @@ param_list = {
     struct('b',8,'alpha',1.00,'beta',1.00)
 };
 
-% 移除了 A5, R5, A6, R6 (Cubic Spline 4階以上微分為0)
-measures = {'ARA','RRA','AP','RP','AT','RT'}; 
+% 建議移除 A5, R5, A6, R6 (Cubic Spline 4階以上微分為0)
+measures = {'ARA','RRA','AP','RP','AT','RT','A5','R5','A6','R6'}; 
 
 files = dir(fullfile(Path_Output, 'MLE_BSpline_b_*.mat'));
 
@@ -222,6 +222,15 @@ for idx = 1:length(param_list)
     M1    = S_1 .* M_val;
     M2    = (S_2 + S_1.^2) .* M_val;
     M3    = (S_3 + 3*S_2.*S_1 + S_1.^3) .* M_val;
+
+    % --- M4 (假設 S4=0) ---
+    Bracket_4 = 4.*S_3.*S_1 + 3.*S_2.^2 + 6.*S_2.*S_1.^2 + S_1.^4;
+    M4        = Bracket_4 .* M_val;
+
+    % --- M5 (假設 S4=0, S5=0) ---
+    Bracket_5 = 10.*S_3.*S_2 + 10.*S_3.*S_1.^2 + 15.*S_1.*S_2.^2 + ...
+                10.*(S_1.^3).*S_2 + S_1.^5;
+    M5        = Bracket_5 .* M_val;
     
     % --- Risk Indices ---
     % ARA = -M' / M = -S'
@@ -235,17 +244,28 @@ for idx = 1:length(param_list)
     % AT = -M''' / M'' 
     risk_pref.AT  = -M3 ./ M2;
     risk_pref.RT  = R_axis .* risk_pref.AT;
+
+    % Order 5: -M4 / M3
+    risk_pref.A5 = -M4 ./ M3;
+    risk_pref.R5 = R_axis .* risk_pref.A5;
+    
+    % Order 6: -M5 / M4
+    risk_pref.A6 = -M5 ./ M4;
+    risk_pref.R6 = R_axis .* risk_pref.A6;
     
     % Output Table
     T_out = table(R_axis, M_val, M1, M2, M3, ...
                    risk_pref.ARA, risk_pref.RRA, ...
                    risk_pref.AP, risk_pref.RP, ...
                    risk_pref.AT, risk_pref.RT, ...
+                   risk_pref.A5, risk_pref.R5, ...
+                   risk_pref.A6, risk_pref.R6, ...
                    'VariableNames', {'R', 'M', 'M1', 'M2', 'M3', ...
-                                     'ARA', 'RRA', 'AP', 'RP', 'AT', 'RT'});
+                                     'ARA', 'RRA', 'AP', 'RP', 'AT', 'RT', ...
+                                     'A5', 'R5', 'A6', 'R6'});
     
     % Filter for saving CSV (around ATM)
-    mask_csv = (R_axis >= 1.17) & (R_axis <= 1.18); % 維持原本的篩選邏輯
+    mask_csv = (R_axis >= 1.09) & (R_axis <= 1.11);
     T_save = T_out(mask_csv, :);
     
     csv_name = sprintf('RiskTable_b_%d_alpha_%.2f_beta_%.2f.csv', b_target, alpha_target, beta_target);
@@ -274,8 +294,8 @@ for idx = 1:length(param_list)
             case 'RP',  y_limits = [0, 16];
             case 'AT',  y_limits = [0, 10];
             case 'RT',  y_limits = [0, 10];
-            case 'A5',  y_limits = [0, 16];
-            case 'R5',  y_limits = [0, 12];
+            case 'A5',  y_limits = [0, 12];
+            case 'R5',  y_limits = [0, 10];
             case 'A6',  y_limits = [0, 16];
             case 'R6',  y_limits = [0, 14];
             otherwise,  axis tight; y_limits = ylim;
