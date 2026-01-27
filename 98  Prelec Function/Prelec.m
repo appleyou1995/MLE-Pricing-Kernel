@@ -6,8 +6,8 @@ Path_MainFolder = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文�
 Path_Output     = fullfile(Path_MainFolder, 'Code', '98  Output');
 
 x = 0.0001:0.001:1;
-alphas = [0.5, 1.0, 1.5];
-betas  = [0.9, 1.0, 1.1];
+alphas = [0.7, 1.0, 1.3];
+betas  = [0.7, 1.0, 1.1];
 
 set(groot, 'defaultAxesFontName', 'Times New Roman');
 set(groot, 'defaultAxesFontSize', 12);
