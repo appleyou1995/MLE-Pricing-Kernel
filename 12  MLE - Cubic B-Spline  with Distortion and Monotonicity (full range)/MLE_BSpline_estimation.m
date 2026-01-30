@@ -6,23 +6,22 @@ function [theta_hat, log_lik, delta_vec, M_vec] = MLE_BSpline_estimation( ...
 
     % Settings
     rng(0);
-    dates  = Realized_Return.date;
     R_vec  = Realized_Return.realized_ret;
     Rf_vec = Risk_Free_Rate;
     months = Smooth_AllR.Properties.VariableNames;
     T      = length(R_vec);
 
     % --- [Step 1] Construct Knots & Precompute Basis ---
-    n         = 3;
-    k_order   = n + 1;
-    num_knots = n + b + 2;
-    
+    n        = 3;
+    k_order  = n + 1;    
     min_knot = Global_Min_R;
     max_knot = Global_Max_R;
-    
-    knots = linspace(min_knot, max_knot, num_knots);
-    knots(1:(n+1))      = min_knot; 
-    knots((end-n):end)  = max_knot;
+
+    num_basis_function = b + 1;
+    num_breaks = num_basis_function - k_order + 2;
+
+    breaks = linspace(min_knot, max_knot, num_breaks);
+    knots  = augknt(breaks, k_order);
     
     % Precompute B-Spline Basis for each day to speed up fmincon
     Basis_Precomputed = cell(T, 1);
@@ -31,13 +30,9 @@ function [theta_hat, log_lik, delta_vec, M_vec] = MLE_BSpline_estimation( ...
         try
             col_name = months{t};
             R_axis = Smooth_AllR.(col_name);
-            
-            % 確保為行向量
             R_axis = R_axis(:);
             
-            % 計算 B-spline matrix
-            B = spcol(knots, k_order, R_axis);
-            
+            B = spcol(knots, k_order, R_axis);            
             Basis_Precomputed{t} = B;
             
         catch ME
