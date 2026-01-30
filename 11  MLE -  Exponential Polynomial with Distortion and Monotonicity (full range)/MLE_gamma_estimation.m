@@ -1,6 +1,6 @@
 %% Main Function: MLE gamma Estimation for Pricing Kernel
 
-function [gamma_hat, log_lik, delta_vec, M_vec] = MLE_gamma_estimation( ...
+function [gamma_hat, log_lik, BIC, delta_vec, M_vec, pit_vec] = MLE_gamma_estimation( ...
     Smooth_AllR, Smooth_AllR_RND, Realized_Return, Risk_Free_Rate, ...
     L, use_delta, alpha, beta, Global_Min_R, Global_Max_R)
 
@@ -52,7 +52,16 @@ function [gamma_hat, log_lik, delta_vec, M_vec] = MLE_gamma_estimation( ...
     log_lik = -neg_LL;
     
     % Post-estimation call
-    [~, delta_vec, M_vec] = log_likelihood_function(gamma_hat, R_vec, Rf_vec, L, ...
-        Smooth_AllR, Smooth_AllR_RND, dates, use_delta, alpha, beta);
+    if nargout > 3
+        [~, BIC, delta_vec, M_vec, pit_vec] = log_likelihood_function(gamma_hat, R_vec, Rf_vec, L, ...
+            Smooth_AllR, Smooth_AllR_RND, dates, use_delta, alpha, beta);
+    else
+        [~, BIC] = log_likelihood_function(gamma_hat, R_vec, Rf_vec, L, ...
+            Smooth_AllR, Smooth_AllR_RND, dates, use_delta, alpha, beta);
+        
+        delta_vec = [];
+        M_vec     = [];
+        pit_vec   = [];
+    end
 
 end

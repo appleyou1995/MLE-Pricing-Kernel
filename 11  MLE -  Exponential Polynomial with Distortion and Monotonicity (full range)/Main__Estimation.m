@@ -46,11 +46,11 @@ clear Risk_Free_Rate_All data FileName input_filename year
 
 diff = 0.05;
 
-alpha_min  = 0.7;
-alpha_max  = 1.3;
+alpha_min  = 0.8;
+alpha_max  = 1.1;
 alpha_grid = alpha_min:diff:alpha_max;
 
-beta_min  = 0.7;
+beta_min  = 0.8;
 beta_max  = 1.1;
 beta_grid = beta_min:diff:beta_max;
 
@@ -113,9 +113,9 @@ cnt = 1;
 for a = 1:length(alpha_grid)
     for b = 1:length(beta_grid)
         for L = 1:max_L
-            tasks(cnt).alpha = alpha_grid(a);
-            tasks(cnt).beta  = beta_grid(b);
-            tasks(cnt).L     = L;
+            tasks(cnt).alpha = alpha_grid(a);                              %#ok<SAGROW>
+            tasks(cnt).beta  = beta_grid(b);                               %#ok<SAGROW>
+            tasks(cnt).L     = L;                                          %#ok<SAGROW>
             cnt = cnt + 1;
         end
     end
@@ -132,7 +132,7 @@ Data_Const = parallel.pool.Constant(struct(...
     'Global_Min_R', Global_Min_R, ...
     'Global_Max_R', Global_Max_R));
 
-fprintf('開始執行 %d 個任務，使用 CPU 全速平行運算...\n', Total_Tasks);
+fprintf('開始執行 %d 個任務，使用 CPU 平行運算...\n', Total_Tasks);
 
 % 確保開啟 Parallel Pool
 if isempty(gcp('nocreate')), parpool; end
@@ -140,35 +140,34 @@ if isempty(gcp('nocreate')), parpool; end
 
 % 3. 外層平行迴圈
 parfor i = 1:Total_Tasks
-    % 取出任務參數
     L     = tasks(i).L;
     alpha = tasks(i).alpha;
     beta  = tasks(i).beta;
     
     outname = sprintf('MLE_gamma_L_%d_alpha_%.2f_beta_%.2f.mat', L, alpha, beta);
-    OutputFile = fullfile(Path_Output, outname);
-    
+    OutputFile = fullfile(Path_Output, outname);    
     fprintf('Task Running: L=%d, a=%.2f, b=%.2f\n', L, alpha, beta);
     
-    % 從 Constant 取出資料 (在此 Worker 內使用)
     D = Data_Const.Value;
-    
-    t0 = tic;
-    % 呼叫估計函數 (注意：此函數內部不能再有 parfor)
-    [gamma_hat, log_lik, delta_vec, M_vec] = MLE_gamma_estimation( ...
+    [gamma_hat, log_lik, BIC] = MLE_gamma_estimation( ...
         D.Smooth_AllR, D.Smooth_AllR_RND, ...
         D.Realized_Return, D.Risk_Free_Rate, ...
         L, use_delta, alpha, beta, D.Global_Min_R, D.Global_Max_R);
     
-    elapsed = toc(t0);
-    
-    % 使用輔助函數存檔
-    parsave_result(OutputFile, gamma_hat, log_lik, L, alpha, beta, elapsed);
+    Result = struct();
+    Result.gamma_hat = gamma_hat;
+    Result.log_lik   = log_lik;
+    Result.BIC       = BIC;
+    Result.L         = L;
+    Result.alpha     = alpha;
+    Result.beta      = beta;
+
+    parsave_result(OutputFile, Result);
 end
 
-disp('所有任務完成！');
+disp('Done.');
 
 % --- 輔助函數：用於 parfor 內存檔 ---
-function parsave_result(fname, gamma_hat, log_lik, L, alpha, beta, elapsed)
-    save(fname, 'gamma_hat', 'log_lik', 'L', 'alpha', 'beta', 'elapsed');
+function parsave_result(fname, data_struct)
+    save(fname, '-struct', 'data_struct');
 end

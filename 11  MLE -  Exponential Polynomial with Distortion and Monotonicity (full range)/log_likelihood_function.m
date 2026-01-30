@@ -1,6 +1,6 @@
 %% Log-Likelihood Function
 
-function [LL, delta_vec, M_vec] = log_likelihood_function(param, R_vec, Rf_vec, L, ...
+function [LL, BIC, delta_vec, M_vec, pit_vec] = log_likelihood_function(param, R_vec, Rf_vec, L, ...
     Smooth_AllR, Smooth_AllR_RND, dates, use_delta, alpha, beta)
 
     T = length(R_vec);
@@ -9,14 +9,15 @@ function [LL, delta_vec, M_vec] = log_likelihood_function(param, R_vec, Rf_vec, 
     % Parameter vector: gamma
     gamma = param(:);
 
-    % Keep delta_vec & M_vec
-    if nargout > 1
+    % Keep delta_vec
+    if nargout > 2
         delta_vec = zeros(T, 1);
     else
         delta_vec = [];
     end
     
-    if nargout > 2
+    % Keep M_vec
+    if nargout > 3
         date_str_1 = num2str(dates(1));
         temp_grid  = Smooth_AllR.(date_str_1);
         N_grid     = length(temp_grid);
@@ -24,6 +25,13 @@ function [LL, delta_vec, M_vec] = log_likelihood_function(param, R_vec, Rf_vec, 
         M_vec = zeros(T, N_grid);
     else
         M_vec = [];
+    end
+
+    % Keep pit_vec
+    if nargout > 4
+        pit_vec = zeros(T, 1);
+    else
+        pit_vec = [];
     end
 
     % Loop over time
@@ -73,16 +81,15 @@ function [LL, delta_vec, M_vec] = log_likelihood_function(param, R_vec, Rf_vec, 
             delta_t = 0;
         end
         
-        if nargout > 1, delta_vec(t) = delta_t; end
+        if nargout > 2, delta_vec(t) = delta_t; end
 
 
         % === Step 4: Evaluate M(R_{t+1}; γ) ===
         logM   = delta_t - poly_sum;
         M_grid = exp(logM);                                                % (1*30000)
-        if nargout > 2
+        if nargout > 3
             M_vec(t, :) = M_grid;
         end
-
 
         % === Step 5: Evaluate f_t(R; γ) ===
         Rf_t_times_M_grid = Rf_t * M_grid;
@@ -103,6 +110,15 @@ function [LL, delta_vec, M_vec] = log_likelihood_function(param, R_vec, Rf_vec, 
         tildeF = cumtrapz(R_axis, baseline_pdf);
         tildeF = tildeF ./ max(tildeF(end), 1e-12);
         tildeF = min(max(tildeF, 1e-12), 1-1e-12);
+
+        % Physical Probability Integral Transform
+        if nargout > 4
+            u_tilde = interp1(R_axis, tildeF, R_realized_t, 'pchip');            
+            u_tilde = min(max(u_tilde, 1e-12), 1-1e-12);
+            w_val   = -log(u_tilde);
+            pit_val = exp( -(w_val^(1/alpha)) / beta );            
+            pit_vec(t) = pit_val;
+        end
 
         % Distortion via closed-form Jacobian
         w    = -log(tildeF);                                               % w = -ln h(R)
@@ -137,5 +153,8 @@ function [LL, delta_vec, M_vec] = log_likelihood_function(param, R_vec, Rf_vec, 
         LL_contributions(t) = log(val);
     end
     
-    LL = sum(LL_contributions);
+    LL  = sum(LL_contributions);
+    k   = length(gamma);
+    n   = T;
+    BIC = k * log(n) - 2 * LL;
 end
