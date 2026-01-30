@@ -5,9 +5,9 @@ clear; clc; close all;
 n_degree           = 3;
 num_basis_function = 8;
 
-k_order          = n_degree + 1;
-num_breaks       = num_basis_function - k_order + 2;
-b                = num_basis_function - 1;
+k_order    = n_degree + 1;
+num_breaks = num_basis_function - k_order + 2;
+b          = num_basis_function - 1;
 
 if num_breaks < 2
     error('Number of basis functions is too small; at least %d are required (k=%d).', k, k);
