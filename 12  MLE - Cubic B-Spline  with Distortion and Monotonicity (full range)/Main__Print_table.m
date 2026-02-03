@@ -1,38 +1,28 @@
 clear; clc;
-
 Path_MainFolder = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel';
 Path_Output = fullfile(Path_MainFolder, 'Code', '12  Output');
 
 
-%% Add MLE log-likelihood
+%% Summarize MLE Results
 
-function x = pick(v,i)
-    if numel(v) >= i, x = v(i); else, x = NaN; end
+folder  = Path_Output;
+files   = dir(fullfile(folder, 'MLE_BSpline_b_*.mat'));
+S       = containers.Map('KeyType','char','ValueType','any');
+b_range = 4:9; 
+
+init_struct = struct('alpha', NaN, 'beta', NaN);
+for b = b_range
+    init_struct.(sprintf('b%d_loglik', b)) = NaN;
+    init_struct.(sprintf('b%d_BIC', b))    = NaN;
 end
+init_row = @() init_struct;
 
-folder = Path_Output;
-files  = dir(fullfile(folder, 'MLE_BSpline_b_*.mat'));
-
-S = containers.Map('KeyType','char','ValueType','any');
-
-% 初始化欄位設定
-% b=4 -> 5 params; 
-% b=6 -> 7 params; 
-% b=8 -> 9 params
-init_row = @() struct( ...
-    'alpha', NaN, 'beta', NaN, ...
-    'b4_loglik', NaN, ...
-    'b4_theta1', NaN, 'b4_theta2', NaN, 'b4_theta3', NaN, 'b4_theta4', NaN, 'b4_theta5', NaN, ...
-    'b6_loglik', NaN, ...
-    'b6_theta1', NaN, 'b6_theta2', NaN, 'b6_theta3', NaN, 'b6_theta4', NaN, 'b6_theta5', NaN, 'b6_theta6', NaN, 'b6_theta7', NaN, ...
-    'b8_loglik', NaN, ...
-    'b8_theta1', NaN, 'b8_theta2', NaN, 'b8_theta3', NaN, 'b8_theta4', NaN, 'b8_theta5', NaN, 'b8_theta6', NaN, 'b8_theta7', NaN, 'b8_theta8', NaN, 'b8_theta9', NaN);
+fprintf('Processing %d files...\n', numel(files));
 
 for k = 1:numel(files)
-    % 讀取 b_val 與 theta_hat
     try
         data = load(fullfile(files(k).folder, files(k).name), ...
-                    'alpha','beta','b_val','theta_hat','log_lik');
+                    'alpha','beta','b_val','log_lik','BIC');
     catch
         warning('無法讀取檔案: %s', files(k).name);
         continue;
@@ -41,7 +31,6 @@ for k = 1:numel(files)
     a = data.alpha;
     b_dist = data.beta;
     b_spline = data.b_val;
-    t = data.theta_hat(:)';
     
     key = sprintf('a%.2f_b%.2f', a, b_dist);
     
@@ -53,74 +42,73 @@ for k = 1:numel(files)
         row.beta  = b_dist;
     end
     
-    % 根據 b_spline 填入對應欄位
-    switch b_spline
-        case 4
-            row.b4_loglik = data.log_lik;
-            for i = 1:5, row.(['b4_theta' num2str(i)]) = pick(t, i); end
-            
-        case 6
-            row.b6_loglik = data.log_lik;
-            for i = 1:7, row.(['b6_theta' num2str(i)]) = pick(t, i); end
-            
-        case 8
-            row.b8_loglik = data.log_lik;
-            for i = 1:9, row.(['b8_theta' num2str(i)]) = pick(t, i); end
-            
-        otherwise
-            warning('Warning: Unexpected b=%d in file %s', b_spline, files(k).name);
-    end
+    field_ll  = sprintf('b%d_loglik', b_spline);
+    field_bic = sprintf('b%d_BIC', b_spline);
+    
+    row.(field_ll)  = data.log_lik;
+    row.(field_bic) = data.BIC;
     
     S(key) = row;
 end
 
-clear k data a b_dist b_spline t key row files
-
 rows = values(S);
-if isempty(rows)
-    error('沒有找到任何符合的資料，請檢查路徑或檔案是否已產生。');
-end
 rows = [rows{:}];
 T = struct2table(rows);
 
-% 格式化數值
 T.alpha = round(T.alpha, 2);
 T.beta  = round(T.beta,  2);
 
 vars = T.Properties.VariableNames;
 for i = 1:numel(vars)
-    col = T.(vars{i});
-    if isnumeric(col)
-        T.(vars{i}) = round(col, 4);
+    if isnumeric(T.(vars{i})) && ~strcmp(vars{i}, 'alpha') && ~strcmp(vars{i}, 'beta')
+        T.(vars{i}) = round(T.(vars{i}), 4);
     end
 end
 
-% 排序
 T = sortrows(T, {'alpha','beta'});
 
-% 修改 5: 找出各個 b 的最佳 LogLik
-[best4, idx4] = max(T.b4_loglik, [], 'omitnan');
-[best6, idx6] = max(T.b6_loglik, [], 'omitnan');
-[best8, idx8] = max(T.b8_loglik, [], 'omitnan');
 
-% 防止空資料報錯
-if isempty(best4), best4 = -Inf; idx4 = 1; end
-if isempty(best6), best6 = -Inf; idx6 = 1; end
-if isempty(best8), best8 = -Inf; idx8 = 1; end
+%% Find Best Models (Max Loglik & Min BIC)
 
-best4_alpha = T.alpha(idx4); best4_beta = T.beta(idx4);
-best6_alpha = T.alpha(idx6); best6_beta = T.beta(idx6);
-best8_alpha = T.alpha(idx8); best8_beta = T.beta(idx8);
+clc;
+fprintf('\n======================================================\n');
+fprintf('           B-SPLINE MODEL SELECTION SUMMARY\n');
+fprintf('======================================================\n');
 
-clc
-fprintf('\n=== Max loglik by b (Spline Knots) ===\n');
-fprintf('b = 4: alpha = %.2f, beta = %.2f, loglik = %.4f\n', best4_alpha, best4_beta, best4);
-fprintf('b = 6: alpha = %.2f, beta = %.2f, loglik = %.4f\n', best6_alpha, best6_beta, best6);
-fprintf('b = 8: alpha = %.2f, beta = %.2f, loglik = %.4f\n', best8_alpha, best8_beta, best8);
+% === 1. Max Log-Likelihood (Higher is Better) ===
+fprintf('\n--- Max Log-Likelihood (Higher is Better) ---\n');
+for b = b_range
+    col_name = sprintf('b%d_loglik', b);
+    if ismember(col_name, T.Properties.VariableNames)
+        [max_val, idx] = max(T.(col_name), [], 'omitnan');
+        if ~isempty(max_val) && ~isnan(max_val)
+            fprintf('b = %d: Loglik = %8.4f | (alpha=%.2f, beta=%.2f)\n', ...
+                b, max_val, T.alpha(idx), T.beta(idx));
+        else
+            fprintf('b = %d: No Data\n', b);
+        end
+    end
+end
+
+% === 2. Min BIC (Lower is Better) ===
+fprintf('\n--- Min BIC (Lower is Better) ---\n');
+for b = b_range
+    col_name = sprintf('b%d_BIC', b);
+    if ismember(col_name, T.Properties.VariableNames)
+        [min_val, idx] = min(T.(col_name), [], 'omitnan');
+        if ~isempty(min_val) && ~isnan(min_val)
+            fprintf('b = %d: BIC    = %8.4f | (alpha=%.2f, beta=%.2f)\n', ...
+                b, min_val, T.alpha(idx), T.beta(idx));
+        else
+            fprintf('b = %d: No Data\n', b);
+        end
+    end
+end
+fprintf('======================================================\n');
 
 
 %% Output csv
 
 out_csv = fullfile(folder, 'MLE_BSpline_estimation_summary.csv');
 writetable(T, out_csv);
-fprintf('Summary saved to: %s\n', out_csv);
+fprintf('\nSummary file saved to:\n%s\n', out_csv);
