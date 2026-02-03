@@ -1,9 +1,12 @@
 %% MATLAB Code: Using augknt + spcol for Open Uniform B-spline
 clear; clc; close all;
 
+Path_MainFolder = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel';
+Path_Output = fullfile(Path_MainFolder, 'Code', '97  Cubic B-Spline');
+
 % --- 1. Setting ---
 n_degree           = 3;
-num_basis_function = 8;
+num_basis_function = 6;
 
 k_order    = n_degree + 1;
 num_breaks = num_basis_function - k_order + 2;
@@ -14,7 +17,7 @@ if num_breaks < 2
 end
 
 x_start = 0;
-x_end   = 1;
+x_end   = 10;
 x       = linspace(x_start, x_end, 1000);
 breaks  = linspace(x_start, x_end, num_breaks);
 
