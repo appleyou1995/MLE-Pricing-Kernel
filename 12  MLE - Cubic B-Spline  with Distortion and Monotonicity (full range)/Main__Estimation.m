@@ -46,12 +46,12 @@ clear Risk_Free_Rate_All data FileName input_filename year
 
 diff = 0.05;
 
-alpha_min  = 0.7;
-alpha_max  = 1.3;
+alpha_min  = 0.8;
+alpha_max  = 1.1;
 alpha_grid = alpha_min:diff:alpha_max;
 
-beta_min  = 0.7;
-beta_max  = 1.1;
+beta_min  = 1.25;
+beta_max  = 1.30;
 beta_grid = beta_min:diff:beta_max;
 
 
@@ -101,7 +101,7 @@ Realized_Return_front = Realized_Return(1:T1, :);
 Risk_Free_Rate_front  = Risk_Free_Rate(1:T1);
 
 % setting
-b_grid = [4, 6, 8];
+b_grid = [4, 5, 6, 7, 8, 9];
 use_delta = true;
 
 % 1. 建立任務列表 (Flatten loops)
@@ -110,9 +110,9 @@ cnt = 1;
 for a = 1:length(alpha_grid)
     for b_idx = 1:length(beta_grid)
         for k = 1:length(b_grid)
-            tasks(cnt).alpha = alpha_grid(a);
-            tasks(cnt).beta  = beta_grid(b_idx);
-            tasks(cnt).b     = b_grid(k);
+            tasks(cnt).alpha = alpha_grid(a);                              %#ok<SAGROW>
+            tasks(cnt).beta  = beta_grid(b_idx);                           %#ok<SAGROW>
+            tasks(cnt).b     = b_grid(k);                                  %#ok<SAGROW>
             cnt = cnt + 1;
         end
     end
@@ -130,7 +130,7 @@ Data_Const = parallel.pool.Constant(struct(...
     'Global_Min_R', Global_Min_R, ...
     'Global_Max_R', Global_Max_R));
 
-fprintf('開始執行 %d 個任務，使用 CPU 全速平行運算...\n', Total_Tasks);
+fprintf('開始執行 %d 個任務，使用 CPU 平行運算...\n', Total_Tasks);
 
 % 確保開啟 Parallel Pool
 if isempty(gcp('nocreate')), parpool; end
@@ -138,8 +138,6 @@ if isempty(gcp('nocreate')), parpool; end
 
 % 3. 外層平行迴圈
 parfor i = 1:Total_Tasks
-
-    % 取出任務參數
     b_val = tasks(i).b;
     alpha = tasks(i).alpha;
     beta  = tasks(i).beta;
@@ -150,23 +148,25 @@ parfor i = 1:Total_Tasks
     
     D = Data_Const.Value;
     
-    t0 = tic;
-    
-    % 呼叫新的估計函數
-    [theta_hat, log_lik, delta_vec, M_vec] = MLE_BSpline_estimation( ...
+    [theta_hat, log_lik, BIC] = MLE_BSpline_estimation( ...
         D.Smooth_AllR, D.Smooth_AllR_RND, ...
         D.Realized_Return, D.Risk_Free_Rate, ...
         b_val, use_delta, alpha, beta, D.Global_Min_R, D.Global_Max_R);
     
-    elapsed = toc(t0);
+    Result = struct();
+    Result.theta_hat = theta_hat;
+    Result.log_lik   = log_lik;
+    Result.BIC       = BIC;
+    Result.b_val     = b_val;
+    Result.alpha     = alpha;
+    Result.beta      = beta;
     
-    % 存檔
-    parsave_result(OutputFile, theta_hat, log_lik, b_val, alpha, beta, elapsed);
+    parsave_result(OutputFile, Result);
 end
 
-disp('所有任務完成！');
+disp('Done.');
 
 % --- 輔助函數：用於 parfor 內存檔 ---
-function parsave_result(fname, theta_hat, log_lik, b_val, alpha, beta, elapsed)
-    save(fname, 'theta_hat', 'log_lik', 'b_val', 'alpha', 'beta', 'elapsed');
+function parsave_result(fname, data_struct)
+    save(fname, '-struct', 'data_struct');
 end

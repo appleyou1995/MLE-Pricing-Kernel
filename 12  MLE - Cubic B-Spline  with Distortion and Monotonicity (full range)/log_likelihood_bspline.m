@@ -1,6 +1,6 @@
 %% Log-Likelihood Function (Cubic B-Spline Version)
 
-function [LL, delta_vec, M_vec] = log_likelihood_bspline(theta, R_vec, Rf_vec, ...
+function [LL, BIC, delta_vec, M_vec, pit_vec] = log_likelihood_bspline(theta, R_vec, Rf_vec, ...
     Basis_Precomputed, Smooth_AllR, Smooth_AllR_RND, months, use_delta, alpha, beta)
 
     T = length(R_vec);
@@ -8,19 +8,28 @@ function [LL, delta_vec, M_vec] = log_likelihood_bspline(theta, R_vec, Rf_vec, .
     
     theta = theta(:);
     
-    if nargout > 1
+    % Keep delta_vec
+    if nargout > 2
         delta_vec = zeros(T, 1);
     else
         delta_vec = [];
     end
     
-    if nargout > 2
+    % Keep M_vec
+    if nargout > 3
         col_name_1 = months{1};
         temp_grid  = Smooth_AllR.(col_name_1);
         N_grid     = length(temp_grid);
         M_vec      = zeros(T, N_grid);
     else
         M_vec = [];
+    end
+
+    % Keep pit_vec
+    if nargout > 4
+        pit_vec = zeros(T, 1);
+    else
+        pit_vec = [];
     end
 
     % Loop over time
@@ -45,12 +54,10 @@ function [LL, delta_vec, M_vec] = log_likelihood_bspline(theta, R_vec, Rf_vec, .
         
         % === Step 2: Compute Spline Sum Q(R) ===
         Spline_Sum = (B_mat * theta);
-        
-        % 數值穩定控制 (避免 exp 爆掉)
         Spline_Sum = max(min(Spline_Sum, 60), -60);
         
-        % === Step 3: Compute delta_t (Eq 5) ===
-        % Eq (5): delta_t = -ln(Rf) + ln( integral( f* x exp(-Spline_Sum) ) )
+        % === Step 3: Compute delta_t ===
+        % delta_t = -ln(Rf) + ln( integral( f* x exp(-Spline_Sum) ) )
         
         if use_delta
             integrand = f_star_curve .* exp(-Spline_Sum);
@@ -63,29 +70,23 @@ function [LL, delta_vec, M_vec] = log_likelihood_bspline(theta, R_vec, Rf_vec, .
             integral_val = 1;
         end
         
-        if nargout > 1, delta_vec(t) = delta_t; end
+        if nargout > 2, delta_vec(t) = delta_t; end
         
-        % === Step 4: Evaluate M(R_{t+1}) (Eq 4) ===
-        % Eq (4): M = exp( delta_t + Spline_Sum )
-        
+        % === Step 4: Evaluate M(R_{t+1}) ===
+        % M = exp( delta_t + Spline_Sum )        
         logM   = delta_t + Spline_Sum;
         M_grid = exp(logM);  
         
-        if nargout > 2
+        if nargout > 3
             M_vec(t, :) = M_grid';
         end
         
-        % === Step 5: Evaluate f_t(R) (Eq 2) ===
-        % Eq (2): f_t = f* / (Rf * M)
+        % === Step 5: Evaluate f_t(R) ===
+        % f_t = f* / (Rf * M)
         % 代入 M: f_t = f* / (Rf * exp(delta + Spline_Sum))
-        %             = f* / (Rf * (Integral/Rf) * exp(Spline_Sum))  <-- 因為 exp(delta) = Integral/Rf
+        %             = f* / (Rf * (Integral/Rf) * exp(Spline_Sum))
         %             = f* / (Integral * exp(Spline_Sum))
-        %             = (f* * exp(-Spline_Sum)) / Integral
-        
-        % 計算 Physical Density (未經 distortion)
-        % 這裡直接用上面算好的 integrand (即 f* * exp(-Spline)) 除以 integral_val
-        % 這樣數值上最穩
-        
+        %             = (f* * exp(-Spline_Sum)) / Integral        
         baseline_pdf = integrand ./ integral_val; 
         
         % Regularization check
@@ -94,10 +95,18 @@ function [LL, delta_vec, M_vec] = log_likelihood_bspline(theta, R_vec, Rf_vec, .
             continue
         end
         
-        % 計算 CDF tildeF
         tildeF = cumtrapz(R_axis, baseline_pdf);
-        tildeF = tildeF ./ max(tildeF(end), 1e-12);                        % 確保歸一化
-        tildeF = min(max(tildeF, 1e-12), 1-1e-12);                         % 邊界保護
+        tildeF = tildeF ./ max(tildeF(end), 1e-12);
+        tildeF = min(max(tildeF, 1e-12), 1-1e-12);
+
+        % Physical Probability Integral Transform
+        if nargout > 4
+            u_tilde = interp1(R_axis, tildeF, R_realized_t, 'pchip');            
+            u_tilde = min(max(u_tilde, 1e-12), 1-1e-12);
+            w_val   = -log(u_tilde);
+            pit_val = exp( -(w_val^(1/alpha)) / beta );            
+            pit_vec(t) = pit_val;
+        end
         
         % === Step 6: Distortion (Alpha / Beta) ===
         w    = -log(tildeF);                                               
@@ -114,9 +123,7 @@ function [LL, delta_vec, M_vec] = log_likelihood_bspline(theta, R_vec, Rf_vec, .
         end
         f_physical_curve = f_physical_curve ./ Z1;
         
-        % === Step 7: Interpolate to get Likelihood of Realized Return ===
-        % 根據實現的 R_realized_t 插值取出機率密度
-        
+        % === Step 7: Interpolate to get Likelihood of Realized Return ===        
         mask = isfinite(R_axis) & isfinite(f_physical_curve);
         R_axis_good = R_axis(mask);
         fP_good     = f_physical_curve(mask);
@@ -135,5 +142,8 @@ function [LL, delta_vec, M_vec] = log_likelihood_bspline(theta, R_vec, Rf_vec, .
         LL_contributions(t) = log(val);
     end
     
-    LL = sum(LL_contributions);
+    LL  = sum(LL_contributions);
+    k   = length(theta);
+    n   = T;
+    BIC = k * log(n) - 2 * LL;
 end
