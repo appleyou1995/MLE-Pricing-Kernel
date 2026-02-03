@@ -78,22 +78,22 @@ set(groot, 'defaultLineMarkerFaceColor','auto');
 alpha_val = 1.00;
 beta_val  = 1.00;
 
-targets = [
-    struct('b', 4, 'alpha', alpha_val, 'beta', beta_val);
-    struct('b', 6, 'alpha', alpha_val, 'beta', beta_val);
-    struct('b', 8, 'alpha', alpha_val, 'beta', beta_val)
-];
+b_range = 4:9;
+targets = [];
+for b_idx = b_range
+    targets = [targets; struct('b', b_idx, 'alpha', alpha_val, 'beta', beta_val)]; %#ok<AGROW>
+end
 
-select_rows = cell(3,1);
+select_rows = cell(length(b_range), 1);
 plot_data   = [];
 
 tol = 1e-9;
 files = dir(fullfile(Path_Output, 'MLE_BSpline_b_*.mat'));
 
 for k = 1:numel(targets)
-    beta_tar = targets(k).b;
+    b_tar     = targets(k).b;
     alpha_tar = targets(k).alpha;
-    beta_tar = targets(k).beta;
+    beta_tar  = targets(k).beta;
     
     chosen_file = '';
     for f = 1:numel(files)
@@ -101,18 +101,20 @@ for k = 1:numel(targets)
             S = load(fullfile(Path_Output, files(f).name), 'b_val','alpha','beta','theta_hat');
         catch, continue; end
         
-        if S.b_val == beta_tar && abs(S.alpha - alpha_tar) <= tol && abs(S.beta - beta_tar) <= tol
+        if S.b_val == b_tar && abs(S.alpha - alpha_tar) <= tol && abs(S.beta - beta_tar) <= tol
             chosen_file = files(f).name;
             
             % --- 計算 M Curve ---
             theta_hat = S.theta_hat;
             
-            % 重建 Knots (邏輯需與估計程式一致)
-            n         = 3; 
-            num_knots = n + beta_tar + 2;
-            knots = linspace(Global_Min_R, Global_Max_R, num_knots);
-            knots(1:(n+1))     = Global_Min_R;
-            knots((end-n):end) = Global_Max_R;
+            n        = 3;
+            k_order  = n + 1;    
+            min_knot = Global_Min_R;
+            max_knot = Global_Max_R;
+            num_basis_function = b_tar + 1;
+            num_breaks = num_basis_function - k_order + 2;
+            breaks = linspace(min_knot, max_knot, num_breaks);
+            knots  = augknt(breaks, k_order);
             
             % 建立 Spline
             sp = spmak(knots, theta_hat');
@@ -120,17 +122,15 @@ for k = 1:numel(targets)
             % 計算 Spline Value: S(R)
             Spline_Val = fnval(sp, R_axis);
             
-            % M(R) = exp( S(R) )  <-- 根據 Eq(4)，指數是正的
-            % 注意：這裡忽略 delta (常數項)，只畫形狀
+            % M(R) = exp( S(R) )
             M_curve = exp(Spline_Val);
             
-            % 存起來畫圖用
-            plot_data = [plot_data; struct('b', beta_tar, 'M', M_curve)]; %#ok<AGROW>
+            plot_data = [plot_data; struct('b', b_tar, 'M', M_curve)];     %#ok<AGROW>
             break;
         end
     end
     if isempty(chosen_file)
-        warning('File not found for b=%d', beta_tar);
+        warning('File not found for b=%d', b_tar);
     end
 end
 
@@ -165,11 +165,17 @@ saveas(gcf, fullfile(Path_Output_Plot, out_png));
 
 param_list = {
     struct('b',4,'alpha',0.95,'beta',0.90)
+    struct('b',5,'alpha',1.00,'beta',0.90)
     struct('b',6,'alpha',1.00,'beta',0.90)
-    struct('b',8,'alpha',1.00,'beta',0.90)
+    struct('b',7,'alpha',0.95,'beta',1.20)
+    struct('b',8,'alpha',0.95,'beta',1.20)
+    struct('b',9,'alpha',0.95,'beta',1.20)
     struct('b',4,'alpha',1.00,'beta',1.00)
+    struct('b',5,'alpha',1.00,'beta',1.00)
     struct('b',6,'alpha',1.00,'beta',1.00)
+    struct('b',7,'alpha',1.00,'beta',1.00)
     struct('b',8,'alpha',1.00,'beta',1.00)
+    struct('b',9,'alpha',1.00,'beta',1.00)
 };
 
 
@@ -177,8 +183,6 @@ param_list = {
 
 clc
 colors = get(groot, 'defaultAxesColorOrder');
-
-% 建議移除 A5, R5, A6, R6 (Cubic Spline 4階以上微分為0)
 measures = {'ARA','RRA','AP','RP','AT','RT','A5','R5','A6','R6'}; 
 
 files = dir(fullfile(Path_Output, 'MLE_BSpline_b_*.mat'));
@@ -191,37 +195,46 @@ for idx = 1:length(param_list)
     
     % ----- Find and Load -----
     chosen_file = '';
+    theta_hat = [];
+    
     for f = 1:numel(files)
         try
-            S = load(fullfile(Path_Output, files(f).name), 'b_val','alpha','beta','theta_hat');
+            S_info = load(fullfile(Path_Output, files(f).name), 'b_val','alpha','beta');
         catch, continue; end
         
-        if S.b_val == b_target && abs(S.alpha - alpha_target)<1e-9 && abs(S.beta - beta_target)<1e-9
+        if S_info.b_val == b_target && ...
+           abs(S_info.alpha - alpha_target) < tol && ...
+           abs(S_info.beta - beta_target) < tol
+            
             chosen_file = files(f).name;
-            theta_hat = S.theta_hat;
+            S_full = load(fullfile(Path_Output, files(f).name), 'theta_hat');
+            theta_hat = S_full.theta_hat;
             break;
         end
     end
     
     if isempty(chosen_file)
-        fprintf('File not found for b=%d, skipping...\n', b_target);
+        fprintf('File not found for b=%d, alpha=%.2f, beta=%.2f. Skipping...\n', ...
+            b_target, alpha_target, beta_target);
         continue;
     end
     fprintf('Processing: %s (b=%d)\n', chosen_file, b_target);
     
     % ----- B-Spline Derivatives -----
     % Reconstruct Knots
-    n         = 3;
-    num_knots = n + b_target + 2;
-    knots = linspace(Global_Min_R, Global_Max_R, num_knots);
-    knots(1:(n+1))     = Global_Min_R;
-    knots((end-n):end) = Global_Max_R;
+    n        = 3;
+    k_order  = n + 1;    
+    min_knot = Global_Min_R;
+    max_knot = Global_Max_R;
+    num_basis_function = b_target + 1;
+    num_breaks = num_basis_function - k_order + 2;
+    breaks = linspace(min_knot, max_knot, num_breaks);
+    knots  = augknt(breaks, k_order);
     
     % Create Spline Structure
     sp = spmak(knots, theta_hat');
     
-    % Compute Spline Values and Derivatives w.r.t R
-    % S(R), S'(R), S''(R), S'''(R)
+    % Compute Spline Values and Derivatives w.r.t R 
     S_0 = fnval(sp, R_axis);             % S(R)
     S_1 = fnval(fnder(sp, 1), R_axis);   % S'(R)
     S_2 = fnval(fnder(sp, 2), R_axis);   % S''(R)
@@ -261,12 +274,12 @@ for idx = 1:length(param_list)
     risk_pref.RT  = R_axis .* risk_pref.AT;
 
     % Order 5: -M4 / M3
-    risk_pref.A5 = -M4 ./ M3;
-    risk_pref.R5 = R_axis .* risk_pref.A5;
+    risk_pref.A5  = -M4 ./ M3;
+    risk_pref.R5  = R_axis .* risk_pref.A5;
     
     % Order 6: -M5 / M4
-    risk_pref.A6 = -M5 ./ M4;
-    risk_pref.R6 = R_axis .* risk_pref.A6;
+    risk_pref.A6  = -M5 ./ M4;
+    risk_pref.R6    = R_axis .* risk_pref.A6;
     
     % Output Table
     T_out = table(R_axis, M_val, M1, M2, M3, ...
@@ -290,6 +303,43 @@ for idx = 1:length(param_list)
     
     csv_name = sprintf('RiskTable_b_%d_alpha_%.2f_beta_%.2f.csv', b_target, alpha_target, beta_target);
     writetable(T_save, fullfile(Path_Output, csv_name));
+
+    fprintf('Saved risk table: %s\n', csv_name);
+    
+    % ============================================================
+    %  Trend Check Table (0.8, 1.0, 1.2)
+    % ============================================================
+    target_R_points = [0.8, 1.0, 1.2];
+    trend_data = struct();
+    trend_data.Measure = measures(:); 
+    
+    for k = 1:length(target_R_points)
+        r_val = target_R_points(k);
+        raw_name = sprintf('Val_at_%.1f', r_val);
+        col_name = strrep(raw_name, '.', '_');
+        
+        vals = zeros(length(measures), 1);
+        for m = 1:length(measures)
+            key = measures{m};
+            y_data = risk_pref.(key);
+            vals(m) = interp1(R_axis, y_data, r_val, 'pchip');
+        end
+        trend_data.(col_name) = vals;
+    end
+    
+    T_trend = struct2table(trend_data);
+    
+    % Format
+    varNamesTrend = T_trend.Properties.VariableNames;
+    for v = 1:numel(varNamesTrend)
+        if isnumeric(T_trend.(varNamesTrend{v}))
+            T_trend.(varNamesTrend{v}) = round(T_trend.(varNamesTrend{v}), 4);
+        end
+    end
+    
+    trend_csv_name = sprintf('TrendCheck_b_%d_alpha_%.2f_beta_%.2f.csv', b_target, alpha_target, beta_target);
+    writetable(T_trend, fullfile(Path_Output, trend_csv_name));
+    fprintf('Saved trend check table: %s\n', trend_csv_name);
     
     % Plotting
     for m = 1:length(measures)
@@ -301,7 +351,7 @@ for idx = 1:length(param_list)
         nexttile;
         hold on;
         
-        plot(R_axis, Y_plot, 'LineWidth', 1.5, 'Color', colors(b_target/2-1,:));
+        plot(R_axis, Y_plot, 'LineWidth', 1.5, 'Color', colors(b_target-3,:));
         
         grid on; hold off;
         xlabel('$R$', 'Interpreter', 'latex');
@@ -328,7 +378,8 @@ for idx = 1:length(param_list)
         close(fig);
     end
 end
-fprintf('Done.\n');
+
+fprintf('Risk plots & tables done.\n');
 
 
 %% Compute delta_t and plot (given b, alpha, beta)
@@ -341,6 +392,7 @@ use_delta = true;
 months = Smooth_AllR.Properties.VariableNames;
 dates  = Realized_Return.date;
 date_objs = datetime(dates, 'ConvertFrom', 'yyyymmdd');
+tol = 1e-9;
 
 for i = 1:length(param_list)
     b_tar     = param_list{i}.b;
@@ -359,7 +411,10 @@ for i = 1:length(param_list)
             continue;
         end
         
-        if S_info.b_val == b_tar && abs(S_info.alpha - alpha_tar) < tol && abs(S_info.beta - beta_tar) < tol
+        if S_info.b_val == b_tar && ...
+           abs(S_info.alpha - alpha_tar) < tol && ...
+           abs(S_info.beta - beta_tar) < tol
+       
             chosen_file = files(f).name;
             S_full = load(Sfile, 'theta_hat');
             theta_hat = S_full.theta_hat;
@@ -378,15 +433,14 @@ for i = 1:length(param_list)
     Basis_Precomputed = cell(T, 1);
     
     % Knots
-    n         = 3;
-    k_order   = n + 1;
-    num_knots = n + b_tar + 2;
-    min_knot  = Global_Min_R;
-    max_knot  = Global_Max_R;
-    
-    knots = linspace(min_knot, max_knot, num_knots);
-    knots(1:(n+1))      = min_knot; 
-    knots((end-n):end)  = max_knot;
+    n        = 3;
+    k_order  = n + 1;    
+    min_knot = Global_Min_R;
+    max_knot = Global_Max_R;
+    num_basis_function = b_tar + 1;
+    num_breaks = num_basis_function - k_order + 2;
+    breaks = linspace(min_knot, max_knot, num_breaks);
+    knots  = augknt(breaks, k_order);
     
     % Basis Matrix
     for t = 1:T
@@ -397,7 +451,7 @@ for i = 1:length(param_list)
     end
 
     % --- Delta Time Series ---
-    [~, delta_vec, ~] = log_likelihood_bspline(theta_hat, ...
+    [~, ~, delta_vec] = log_likelihood_bspline(theta_hat, ...
         Realized_Return.realized_ret, Risk_Free_Rate, ...
         Basis_Precomputed, ...
         Smooth_AllR, Smooth_AllR_RND, ...
@@ -407,7 +461,7 @@ for i = 1:length(param_list)
     % --- Plot ---
     fig = figure('Position', [50 80 450 400], 'Visible', 'on');
     
-    color_idx = b_tar/2 - 1;
+    color_idx = b_tar - 3;
     plot(date_objs, delta_vec, 'LineWidth', 1.5, 'Color', colors(color_idx,:));
     
     datetick('x', 'yyyy', 'KeepTicks');
@@ -425,3 +479,159 @@ for i = 1:length(param_list)
 end
 
 fprintf('All delta plots completed.\n');
+
+
+%% Compute PIT, Plot Histogram, and Save Statistics
+
+clc
+fprintf('\nGenerating PIT Histograms and Statistics...\n');
+colors = get(groot, 'defaultAxesColorOrder');
+files = dir(fullfile(Path_Output, 'MLE_BSpline_b_*.mat'));
+use_delta = true;
+months = Smooth_AllR.Properties.VariableNames;
+dates = Realized_Return.date;
+
+stats_list = [];
+stats_cnt = 1;
+
+for i = 1:length(param_list)
+    b_tar     = param_list{i}.b;
+    alpha_tar = param_list{i}.alpha;
+    beta_tar  = param_list{i}.beta;
+    
+    chosen_file = '';
+    theta_hat = [];
+    
+    for f = 1:numel(files)
+        Sfile = fullfile(Path_Output, files(f).name);
+        try
+            S_info = load(Sfile, 'b_val', 'alpha', 'beta'); 
+        catch, continue; end
+        
+        if S_info.b_val == b_tar && ...
+           abs(S_info.alpha - alpha_tar) < tol && ...
+           abs(S_info.beta - beta_tar) < tol
+       
+            chosen_file = files(f).name;
+            S_full = load(Sfile, 'theta_hat');
+            theta_hat = S_full.theta_hat;
+            break;
+        end
+    end
+    
+    if isempty(chosen_file)
+        warning('Case b=%d, alpha=%.2f, beta=%.2f not found. Skipping.', b_tar, alpha_tar, beta_tar);
+        continue;
+    end
+    
+    fprintf('Processing PIT: b=%d, alpha=%.2f, beta=%.2f\n', b_tar, alpha_tar, beta_tar);
+    
+    % Basis Matrix Calculation (Need to re-compute for PIT)
+    T = length(Realized_Return.realized_ret);
+    Basis_Precomputed = cell(T, 1);
+    
+    n        = 3;
+    k_order  = n + 1;    
+    min_knot = Global_Min_R;
+    max_knot = Global_Max_R;
+    num_basis_function = b_tar + 1;
+    num_breaks = num_basis_function - k_order + 2;
+    breaks = linspace(min_knot, max_knot, num_breaks);
+    knots  = augknt(breaks, k_order);
+    
+    for t = 1:T
+        col_name = months{t};
+        R_axis_t = Smooth_AllR.(col_name);
+        R_axis_t = R_axis_t(:);
+        Basis_Precomputed{t} = spcol(knots, k_order, R_axis_t);
+    end
+
+    % 計算 PIT 向量
+    [~, ~, ~, ~, pit_vec] = log_likelihood_bspline(theta_hat, ...
+        Realized_Return.realized_ret, Risk_Free_Rate, ...
+        Basis_Precomputed, ...
+        Smooth_AllR, Smooth_AllR_RND, ...
+        months, ...
+        use_delta, alpha_tar, beta_tar);
+    
+    % ============================================================
+    %  Statistical Tests
+    % ============================================================
+    
+    % KS Test
+    pd_uniform = makedist('Uniform', 'Lower', 0, 'Upper', 1);
+    [~, p_ks, ks_stat] = kstest(pit_vec, 'CDF', pd_uniform);
+    
+    % Berkowitz
+    z_norm = norminv(pit_vec); 
+    z_norm = z_norm(isfinite(z_norm)); 
+    
+    % JB Test
+    [~, p_jb, jb_stat] = jbtest(z_norm);
+    
+    % LB Test
+    lags_to_test = [1, 5, 10];
+    [~, p_lb, lb_stat] = lbqtest(z_norm, 'Lags', lags_to_test);
+    
+    % --- 儲存結果 ---
+    stats_list(stats_cnt).b     = b_tar;
+    stats_list(stats_cnt).alpha = alpha_tar;
+    stats_list(stats_cnt).beta  = beta_tar;
+    
+    stats_list(stats_cnt).KS_Stat = ks_stat;
+    stats_list(stats_cnt).KS_Pval = p_ks;
+    stats_list(stats_cnt).JB_Stat = jb_stat;
+    stats_list(stats_cnt).JB_Pval = p_jb;
+    
+    stats_list(stats_cnt).LB_Stat_Lag1  = lb_stat(1);
+    stats_list(stats_cnt).LB_Pval_Lag1  = p_lb(1);
+    stats_list(stats_cnt).LB_Stat_Lag5  = lb_stat(2);
+    stats_list(stats_cnt).LB_Pval_Lag5  = p_lb(2);
+    stats_list(stats_cnt).LB_Stat_Lag10 = lb_stat(3);
+    stats_list(stats_cnt).LB_Pval_Lag10 = p_lb(3);
+    
+    stats_cnt = stats_cnt + 1;
+
+    % ============================================================
+    %  Plotting Histogram
+    % ============================================================
+    fig = figure('Position', [50 80 450 400], 'Visible', 'on');
+    layout = tiledlayout(1, 1, 'TileSpacing', 'Compact', 'Padding', 'None');
+    nexttile;
+    hold on;
+    
+    h = histogram(pit_vec, 20, 'Normalization', 'pdf', ...
+        'FaceColor', [0.7 0.7 0.7], 'EdgeColor', 'w');
+    
+    yline(1, 'r--', 'LineWidth', 2, 'DisplayName', 'Uniform(0,1)');
+    
+    hold off;
+    
+    xlabel('$z_t$');
+    ylabel('Density');
+    xlim([0 1]);
+    ylim([0 1.8]);
+    
+    grid on;
+    set(gca, 'LooseInset', get(gca, 'TightInset'));
+    
+    out_name = sprintf('plot_PIT_b_%d_alpha_%.2f_beta_%.2f.png', b_tar, alpha_tar, beta_tar);
+    saveas(fig, fullfile(Path_Output_Plot, out_name));
+    % close(fig);
+end
+
+% Save Statistics
+if ~isempty(stats_list)
+    T_stats = struct2table(stats_list);
+    vars = T_stats.Properties.VariableNames;
+    for i = 1:numel(vars)
+        if isnumeric(T_stats.(vars{i}))
+            T_stats.(vars{i}) = round(T_stats.(vars{i}), 4);
+        end
+    end
+    csv_filename = fullfile(Path_Output, 'PIT_Test_Statistics_BSpline.csv');
+    writetable(T_stats, csv_filename);
+    fprintf('\nStatistics saved to: %s\n', csv_filename);
+end
+
+fprintf('All PIT histograms and statistics completed.\n');
