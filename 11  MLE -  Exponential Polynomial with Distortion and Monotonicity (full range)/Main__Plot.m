@@ -192,24 +192,32 @@ files = dir(fullfile(Path_Output, 'MLE_gamma_L_*.mat'));
 % ============================================================
 %  Main Loop
 % ============================================================
-% for idx = 1:length(param_list)
 for idx = 1:length(param_list)
     L_target     = param_list{idx}.L;
     alpha_target = param_list{idx}.alpha;
     beta_target  = param_list{idx}.beta;
     
-    % ----- Find and Load file -----
+% ----- Find and Load file -----
     chosen_file = '';
+    tol = 1e-8;
+    
     for f = 1:numel(files)
         Sfile = fullfile(Path_Output, files(f).name);
-        S     = load(Sfile, 'L','alpha','beta','gamma_hat');
-        if S.L == L_target && S.alpha == alpha_target && S.beta == beta_target
+        S_check = load(Sfile, 'L','alpha','beta'); 
+        
+        if S_check.L == L_target && ...
+           abs(S_check.alpha - alpha_target) < tol && ...
+           abs(S_check.beta - beta_target) < tol
+            
             chosen_file = files(f).name;
-            gamma_hat = S.gamma_hat;
+            S_full = load(Sfile, 'gamma_hat');
+            gamma_hat = S_full.gamma_hat;
             break;
         end
     end
+    
     if isempty(chosen_file)
+        fprintf('Looking for: L=%d, alpha=%.15f, beta=%.15f\n', L_target, alpha_target, beta_target);
         error('MLE file not found for L=%d alpha=%.2f beta=%.2f', ...
               L_target, alpha_target, beta_target);
     end
@@ -360,6 +368,43 @@ for idx = 1:length(param_list)
     fprintf('Saved filtered table: %s (Rows: %d)\n', csv_filename, height(T_out));
     
     % ============================================================
+    %  Extract Values at Specific R (0.8, 1.0, 1.2) for Trend Check
+    % ============================================================
+    target_R_points = [0.8, 1.0, 1.2];
+    trend_data = struct();
+    trend_data.Measure = measures(:); 
+    
+    for k = 1:length(target_R_points)
+        r_val = target_R_points(k);
+        raw_name = sprintf('Val_at_%.1f', r_val);
+        col_name = strrep(raw_name, '.', '_');
+        
+        vals = zeros(length(measures), 1);
+        for m = 1:length(measures)
+            key = measures{m};
+            y_data = risk_pref.(key);
+            vals(m) = interp1(R_axis, y_data, r_val, 'pchip');
+        end
+        trend_data.(col_name) = vals;
+    end
+    
+    T_trend = struct2table(trend_data);
+    
+    % 數值格式化
+    varNamesTrend = T_trend.Properties.VariableNames;
+    for v = 1:numel(varNamesTrend)
+        if isnumeric(T_trend.(varNamesTrend{v}))
+            T_trend.(varNamesTrend{v}) = round(T_trend.(varNamesTrend{v}), 2);
+        end
+    end
+    
+    % 存檔 Trend Table
+    trend_csv_name = sprintf('TrendCheck_L_%d_alpha_%s_beta_%s.csv', L_target, alpha_str, beta_str);
+    trend_full_path = fullfile(Path_Output, trend_csv_name);
+    writetable(T_trend, trend_full_path);
+    fprintf('Saved trend check table: %s\n', trend_csv_name);
+    
+    % ============================================================
     %  Plotting (Using full data, NOT filtered data)
     % ============================================================
     for m = 1:length(measures)
@@ -400,7 +445,7 @@ for idx = 1:length(param_list)
         
         out_png = sprintf('%s_L_%d_alpha_%s_beta_%s.png', ...
                           key, L_target, alpha_str, beta_str);
-        saveas(fig, fullfile(Path_Output_Plot, out_png));
+        % saveas(fig, fullfile(Path_Output_Plot, out_png));
         close(fig);
     end
 end
@@ -445,7 +490,7 @@ for i = 1:length(param_list)
     fprintf('Processing: L=%d, alpha=%.2f, beta=%.2f\n', L_tar, a_tar, b_tar);
     
     % 4.2 計算 Delta Time Series 
-    [~, delta_vec, ~] = log_likelihood_function(gamma_hat, ...
+    [~, ~, delta_vec] = log_likelihood_function(gamma_hat, ...
         Realized_Return.realized_ret, Risk_Free_Rate, L_tar, ...
         Smooth_AllR, Smooth_AllR_RND, dates, use_delta, a_tar, b_tar);
     
@@ -471,3 +516,147 @@ for i = 1:length(param_list)
 end
 
 fprintf('All delta plots completed.\n');
+
+
+%% Compute PIT, Plot Histogram, and Save Statistics
+
+clc
+fprintf('\nGenerating PIT Histograms and Statistics...\n');
+colors = get(groot, 'defaultAxesColorOrder');
+files = dir(fullfile(Path_Output, 'MLE_gamma_L_*.mat'));
+use_delta = true;
+dates = Realized_Return.date;
+
+stats_list = [];
+stats_cnt = 1;
+
+for i = 1:length(param_list)
+    L_tar = param_list{i}.L;
+    a_tar = param_list{i}.alpha;
+    b_tar = param_list{i}.beta;
+    
+    % 5.1 尋找對應的 .mat 檔案
+    chosen_file = '';
+    gamma_hat = [];
+    tol = 1e-9;
+    
+    for f = 1:numel(files)
+        Sfile = fullfile(Path_Output, files(f).name);
+        S_info = load(Sfile, 'L', 'alpha', 'beta'); 
+        if S_info.L == L_tar && abs(S_info.alpha - a_tar) < tol && abs(S_info.beta - b_tar) < tol
+            chosen_file = files(f).name;
+            S_full = load(Sfile, 'gamma_hat');
+            gamma_hat = S_full.gamma_hat;
+            break;
+        end
+    end
+    
+    if isempty(chosen_file)
+        warning('Case L=%d, alpha=%.2f, beta=%.2f not found. Skipping.', L_tar, a_tar, b_tar);
+        continue;
+    end
+    
+    fprintf('Processing PIT: L=%d, alpha=%.2f, beta=%.2f\n', L_tar, a_tar, b_tar);
+    
+    % 5.2 計算 PIT 向量
+    [~, ~, ~, ~, pit_vec] = log_likelihood_function(gamma_hat, ...
+        Realized_Return.realized_ret, Risk_Free_Rate, L_tar, ...
+        Smooth_AllR, Smooth_AllR_RND, dates, use_delta, a_tar, b_tar);
+    
+    % ============================================================
+    %  Statistical Tests (KS, Berkowitz, Ljung-Box)
+    % ============================================================
+    
+    % 1. Kolmogorov-Smirnov Test (Uniformity)
+    pd_uniform = makedist('Uniform', 'Lower', 0, 'Upper', 1);
+    [~, p_ks, ks_stat] = kstest(pit_vec, 'CDF', pd_uniform);
+    
+    % 2. Berkowitz Transformation (Inverse Normal)
+    z_norm = norminv(pit_vec); 
+    z_norm = z_norm(isfinite(z_norm)); % 去除可能的 Inf
+    
+    % 3. Jarque-Bera Test (Normality check for Berkowitz)
+    [~, p_jb, jb_stat] = jbtest(z_norm);
+    
+    % 4. Ljung-Box Test (Independence check)
+    lags_to_test = [1, 5, 10];
+    [~, p_lb, lb_stat] = lbqtest(z_norm, 'Lags', lags_to_test);
+    
+    % --- 儲存統計結果 ---
+    stats_list(stats_cnt).L     = L_tar;
+    stats_list(stats_cnt).alpha = a_tar;
+    stats_list(stats_cnt).beta  = b_tar;
+    
+    % KS Test
+    stats_list(stats_cnt).KS_Stat = ks_stat;
+    stats_list(stats_cnt).KS_Pval = p_ks;
+    
+    % JB Test
+    stats_list(stats_cnt).JB_Stat = jb_stat;
+    stats_list(stats_cnt).JB_Pval = p_jb;
+    
+    % LB Test (分別儲存不同 Lag)
+    stats_list(stats_cnt).LB_Stat_Lag1 = lb_stat(1);
+    stats_list(stats_cnt).LB_Pval_Lag1 = p_lb(1);
+    
+    stats_list(stats_cnt).LB_Stat_Lag5 = lb_stat(2);
+    stats_list(stats_cnt).LB_Pval_Lag5 = p_lb(2);
+    
+    stats_list(stats_cnt).LB_Stat_Lag10 = lb_stat(3);
+    stats_list(stats_cnt).LB_Pval_Lag10 = p_lb(3);
+    
+    stats_cnt = stats_cnt + 1;
+
+    % ============================================================
+    %  Plotting Histogram
+    % ============================================================
+    fig = figure('Position', [50 80 450 400], 'Visible', 'on');
+    layout = tiledlayout(1, 1, 'TileSpacing', 'Compact', 'Padding', 'None');
+    nexttile;
+    hold on;
+    
+    % 繪製直方圖
+    h = histogram(pit_vec, 20, 'Normalization', 'pdf', ...
+        'FaceColor', [0.7 0.7 0.7], 'EdgeColor', 'w');
+    
+    % 繪製理論線
+    yline(1, 'r--', 'LineWidth', 2, 'DisplayName', 'Uniform(0,1)');
+    
+    hold off;
+    
+    xlabel('$z_t$');
+    ylabel('Density');
+    xlim([0 1]);
+    ylim([0 1.8]);
+    
+    grid on;
+    set(gca, 'LooseInset', get(gca, 'TightInset'));
+    
+    % 存檔
+    out_name = sprintf('plot_PIT_L_%d_alpha_%.2f_beta_%.2f.png', L_tar, a_tar, b_tar);
+    saveas(fig, fullfile(Path_Output_Plot, out_name));
+    % close(fig);
+end
+
+% ============================================================
+%  Save Statistics to CSV
+% ============================================================
+if ~isempty(stats_list)
+    T_stats = struct2table(stats_list);
+    
+    % 數值四捨五入 (Optional, 為了 CSV 好讀)
+    vars = T_stats.Properties.VariableNames;
+    for i = 1:numel(vars)
+        if isnumeric(T_stats.(vars{i}))
+            T_stats.(vars{i}) = round(T_stats.(vars{i}), 4);
+        end
+    end
+    
+    csv_filename = fullfile(Path_Output, 'PIT_Test_Statistics.csv');
+    writetable(T_stats, csv_filename);
+    fprintf('\nStatistics saved to: %s\n', csv_filename);
+else
+    fprintf('\nNo statistics generated.\n');
+end
+
+fprintf('All PIT histograms and statistics completed.\n');
