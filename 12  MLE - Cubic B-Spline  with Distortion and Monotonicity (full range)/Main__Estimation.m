@@ -46,12 +46,12 @@ clear Risk_Free_Rate_All data FileName input_filename year
 
 diff = 0.05;
 
-alpha_min  = 0.8;
+alpha_min  = 0.9;
 alpha_max  = 1.1;
 alpha_grid = alpha_min:diff:alpha_max;
 
-beta_min  = 1.25;
-beta_max  = 1.30;
+beta_min  = 0.9;
+beta_max  = 1.1;
 beta_grid = beta_min:diff:beta_max;
 
 
@@ -84,7 +84,8 @@ end
 Global_Min_R = Global_Min_R * 0.9; 
 Global_Max_R = Global_Max_R * 1.1;
 
-Path_Output = fullfile(Path_MainFolder, 'Code', '12  Output');
+% Path_Output = fullfile(Path_MainFolder, 'Code', '12  Output');
+Path_Output = fullfile(Path_MainFolder, 'Code', '12  Output - Quartic');
 
 
 %% Estimation: MLE over (alpha, beta, b) - Cubic B-Spline

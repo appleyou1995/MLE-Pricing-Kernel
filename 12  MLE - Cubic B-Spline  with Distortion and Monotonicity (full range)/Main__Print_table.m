@@ -1,6 +1,7 @@
 clear; clc;
 Path_MainFolder = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel';
-Path_Output = fullfile(Path_MainFolder, 'Code', '12  Output');
+% Path_Output = fullfile(Path_MainFolder, 'Code', '12  Output');
+Path_Output = fullfile(Path_MainFolder, 'Code', '12  Output - Quartic');
 
 
 %% Summarize MLE Results

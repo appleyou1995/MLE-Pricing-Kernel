@@ -12,13 +12,19 @@ function [theta_hat, log_lik, BIC, delta_vec, M_vec, pit_vec] = MLE_BSpline_esti
     T      = length(R_vec);
 
     % --- [Step 1] Construct Knots & Precompute Basis ---
-    n        = 3;
-    k_order  = n + 1;    
+    % n_degree = 3 : cubic
+    %          = 4 : quartic
+    n_degree = 4;
+    k_order  = n_degree + 1;    
     min_knot = Global_Min_R;
     max_knot = Global_Max_R;
 
     num_basis_function = b + 1;
     num_breaks = num_basis_function - k_order + 2;
+    
+    if num_breaks < 2
+        error('基底函數個數 b=%d 不足於支撐 degree n=%d 的 B-spline 模型。需增加 b 的值。', b, n);
+    end
 
     breaks = linspace(min_knot, max_knot, num_breaks);
     knots  = augknt(breaks, k_order);
