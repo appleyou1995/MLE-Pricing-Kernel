@@ -68,6 +68,24 @@ clear Path_Data_02 Target_TTM data input_filename year
 clear col_data i this_field fields
 
 
+%% Parameter sets (six cases)
+
+param_list = {
+    struct('L',1,'alpha',0.95,'beta',0.90)
+    struct('L',2,'alpha',0.95,'beta',0.90)
+    struct('L',3,'alpha',1.00,'beta',0.90)
+    struct('L',1,'alpha',1.00,'beta',1.00)
+    struct('L',2,'alpha',1.00,'beta',1.00)
+    struct('L',3,'alpha',1.00,'beta',1.00)
+};
+
+% 設定繪圖群組：前三組為 Distorted，後三組為 Undistorted
+plot_groups = {
+    struct('indices', 1:3, 'suffix', 'distorted',   'title', 'Distorted M-Curve')
+    struct('indices', 4:6, 'suffix', 'undistorted', 'title', 'Undistorted M-Curve')
+};
+
+
 %% Plot setting
 
 set(groot, 'defaultAxesFontName', 'Times New Roman');
@@ -75,6 +93,220 @@ set(groot, 'defaultAxesFontSize', 12);
 set(groot, 'defaultTextInterpreter', 'latex');
 set(groot, 'defaultLegendInterpreter', 'latex');
 set(groot, 'defaultLineMarkerFaceColor','auto');
+
+
+%% Plot M curve (Distorted vs Undistorted)
+
+tol = 1e-9;
+files = dir(fullfile(Path_Output, 'MLE_gamma_L_*.mat'));
+colors = get(groot, 'defaultAxesColorOrder');
+
+for g = 1:numel(plot_groups)
+    group = plot_groups{g};
+    
+    fig = figure('Position',[50 80 500 500]);
+    set(fig, 'GraphicsSmoothing', 'on');
+    set(fig, 'Renderer', 'painters');
+    layout = tiledlayout(1, 1, 'TileSpacing', 'Compact', 'Padding', 'None');
+    nexttile;
+    hold on;
+    
+    for k = 1:numel(group.indices)
+        idx = group.indices(k);
+        p = param_list{idx};
+        
+        chosen_file = '';
+        for f = 1:numel(files)
+            Sfile = fullfile(Path_Output, files(f).name);
+            S = load(Sfile, 'L','alpha','beta','gamma_hat');
+            if isfield(S,'L') && isfield(S,'alpha') && isfield(S,'beta')
+                if S.L == p.L && abs(S.alpha - p.alpha) <= tol && abs(S.beta - p.beta) <= tol
+                    chosen_file = Sfile;
+                    gamma_hat = S.gamma_hat;
+                    break
+                end
+            end
+        end
+        
+        % M_curve
+        poly_sum = zeros(size(logR));
+        for l = 1:p.L
+            poly_sum = poly_sum + gamma_hat(l) * (logR.^l);
+        end
+        M_curve = exp(-poly_sum);
+        
+        legend_str = sprintf('$L=%d, \\,\\alpha=%.2f, \\,\\beta=%.2f$', p.L, p.alpha, p.beta);
+        plot(R_axis, M_curve, 'LineWidth', 2, ...
+            'Color', colors(k,:), ... 
+            'DisplayName', legend_str);
+    end
+    
+    xlabel('$R$');
+    ylabel('$M(R)$');
+    grid on;
+    xlim([0.8 1.2]);
+    % ylim([0.7 1.8]);
+    legend('show', 'Location', 'northeast', 'Box', 'off', 'FontSize', 11);
+    
+    out_name = sprintf('plot_M_curve_Group_%s.png', group.suffix);
+    exportgraphics(fig, fullfile(Path_Output_Plot, out_name), 'Resolution', 300);
+    hold off;
+end
+
+
+%% Plot Delta Time Series (Distorted vs Undistorted)
+
+dates = Realized_Return.date;
+date_objs = datetime(dates, 'ConvertFrom', 'yyyymmdd');
+use_delta = true;
+tol = 1e-9;
+files = dir(fullfile(Path_Output, 'MLE_gamma_L_*.mat'));
+colors = get(groot, 'defaultAxesColorOrder');
+
+for g = 1:numel(plot_groups)
+    group = plot_groups{g};
+    
+    fig = figure('Position',[50 80 500 500]);
+    set(fig, 'GraphicsSmoothing', 'on');
+    set(fig, 'Renderer', 'painters');
+    layout = tiledlayout(1, 1, 'TileSpacing', 'Compact', 'Padding', 'None');
+    nexttile;
+    hold on;
+    
+    for k = 1:numel(group.indices)
+        idx = group.indices(k);
+        p = param_list{idx};
+        
+        chosen_file = '';
+        gamma_hat = [];
+        for f = 1:numel(files)
+            Sfile = fullfile(Path_Output, files(f).name);
+            S = load(Sfile, 'L','alpha','beta','gamma_hat');
+            if isfield(S,'L') && isfield(S,'alpha') && isfield(S,'beta')
+                if S.L == p.L && abs(S.alpha - p.alpha) <= tol && abs(S.beta - p.beta) <= tol
+                    gamma_hat = S.gamma_hat;
+                    chosen_file = Sfile;
+                    break
+                end
+            end
+        end
+        
+        if isempty(chosen_file)
+            continue;
+        end
+        
+        % Delta Time Series
+        [~, ~, delta_vec] = log_likelihood_function(gamma_hat, ...
+            Realized_Return.realized_ret, Risk_Free_Rate, p.L, ...
+            Smooth_AllR, Smooth_AllR_RND, dates, use_delta, p.alpha, p.beta);
+        
+        legend_str = sprintf('$L=%d, \\,\\alpha=%.2f, \\,\\beta=%.2f$', p.L, p.alpha, p.beta);
+        plot(date_objs, delta_vec, 'LineWidth', 1.5, ...
+            'Color', colors(k,:), ... 
+            'DisplayName', legend_str);
+    end
+    
+    ylabel('$\delta_t$', 'Rotation', 0, 'HorizontalAlignment', 'right');
+    grid on;
+    xlim([min(date_objs), max(date_objs)]);
+    ylim([-0.09 0.03]);    
+    xtickformat('yyyy');
+    legend('show', 'Location', 'southwest', 'Box', 'off', 'FontSize', 11);
+    
+    out_name = sprintf('plot_delta_Group_%s.png', group.suffix);
+    exportgraphics(fig, fullfile(Path_Output_Plot, out_name), 'Resolution', 300);
+    hold off;
+end
+
+
+%% Plot Risk Preference Indices (Distorted vs Undistorted)
+
+measures_to_plot = {'ARA','RRA','AP','RP','AT','RT'};
+
+tol = 1e-9;
+files = dir(fullfile(Path_Output, 'MLE_gamma_L_*.mat'));
+colors = get(groot, 'defaultAxesColorOrder');
+
+for m = 1:length(measures_to_plot)
+    measure_key = measures_to_plot{m};
+    
+    for g = 1:numel(plot_groups)
+        group = plot_groups{g};
+        
+        fig = figure('Position', [50 80 500 500]);
+        set(fig, 'GraphicsSmoothing', 'on');
+        set(fig, 'Renderer', 'painters');
+        tiledlayout(1, 1, 'TileSpacing', 'Compact', 'Padding', 'None');
+        nexttile;
+        hold on;
+        
+        for k = 1:numel(group.indices)
+            idx = group.indices(k);
+            p = param_list{idx};
+            
+            % 尋找對應的 gamma_hat
+            gamma_hat = [];
+            for f = 1:numel(files)
+                Sfile = fullfile(Path_Output, files(f).name);
+                S = load(Sfile, 'L','alpha','beta','gamma_hat');
+                if S.L == p.L && abs(S.alpha - p.alpha) <= tol && abs(S.beta - p.beta) <= tol
+                    gamma_hat = S.gamma_hat;
+                    break
+                end
+            end
+            
+            if isempty(gamma_hat), continue; end
+            
+            % --- 計算導數 (ln M w.r.t x) ---
+            x_vals = log(R_axis);
+            y_x = zeros(size(x_vals)); y_xx = zeros(size(x_vals)); y_xxx = zeros(size(x_vals));
+            for l = 1:p.L
+                y_x   = y_x   - l * gamma_hat(l) * (x_vals.^(l-1));
+                if l >= 2, y_xx  = y_xx  - l * (l-1) * gamma_hat(l) * (x_vals.^(l-2)); end
+                if l >= 3, y_xxx = y_xxx - l * (l-1) * (l-2) * gamma_hat(l) * (x_vals.^(l-3)); end
+            end
+            
+            % --- 使用原本的公式計算比值 ---
+            % y1 = M'/M, y2 = M''/M, y3 = M'''/M
+            y1_R = y_x ./ R_axis;
+            y2_R = (y_xx - y_x) ./ (R_axis.^2);
+            y3_R = (y_xxx - 3*y_xx + 2*y_x) ./ (R_axis.^3);
+            
+            M_ratio_1 = y1_R;              % M'/M
+            M_ratio_2 = y2_R + y1_R.^2;    % M''/M
+            M_ratio_3 = y3_R + 3*y1_R.*y2_R + y1_R.^3; % M'''/M
+            
+            switch measure_key
+                case 'ARA', Y_plot = -M_ratio_1;
+                case 'RRA', Y_plot = -M_ratio_1 .* R_axis;
+                case 'AP',  Y_plot = -M_ratio_2 ./ M_ratio_1;
+                case 'RP',  Y_plot = (-M_ratio_2 ./ M_ratio_1) .* R_axis;
+                case 'AT',  Y_plot = -M_ratio_3 ./ M_ratio_2;
+                case 'RT',  Y_plot = (-M_ratio_3 ./ M_ratio_2) .* R_axis;
+            end
+            
+            legend_str = sprintf('$L=%d, \\,\\alpha=%.2f, \\,\\beta=%.2f$', p.L, p.alpha, p.beta);
+            plot(R_axis, Y_plot, 'LineWidth', 2, 'Color', colors(k,:), 'DisplayName', legend_str);
+        end
+        
+        xlabel('$R$'); ylabel(measure_key, 'Interpreter', 'none'); grid on;
+        xlim([0.8 1.2]);
+        
+        % 套用 Y 軸範圍
+        switch measure_key
+            case 'ARA', ylim([0, 4.5]); case 'RRA', ylim([0, 3.6]);
+            case 'AP',  ylim([0, 10]);  case 'RP',  ylim([0, 10]);
+            case 'AT',  ylim([0, 10]);  case 'RT',  ylim([0, 10]);
+        end
+        
+        legend('show', 'Location', 'northeast', 'Box', 'off', 'FontSize', 11);
+        
+        % 使用新的命名格式 Combined_Risk_...
+        out_name = sprintf('Group_Risk_%s_%s.png', measure_key, group.suffix);
+        exportgraphics(fig, fullfile(Path_Output_Plot, out_name), 'Resolution', 300);
+        close(fig);
+    end
+end
 
 
 %% Plot M curve
@@ -160,18 +392,6 @@ set(gca,'LooseInset',get(gca,'TightInset'));
 % Output
 out_png = sprintf('plot_M_curve_alpha_%.2f_beta_%.2f.png', alpha_val, beta_val);
 saveas(gcf, fullfile(Path_Output_Plot, out_png));
-
-
-%% Parameter sets (six cases)
-
-param_list = {
-    struct('L',1,'alpha',0.95,'beta',0.90)
-    struct('L',2,'alpha',0.95,'beta',0.90)
-    struct('L',3,'alpha',1.00,'beta',0.90)
-    struct('L',1,'alpha',1.00,'beta',1.00)
-    struct('L',2,'alpha',1.00,'beta',1.00)
-    struct('L',3,'alpha',1.00,'beta',1.00)
-};
 
 
 %% Compute risk preference indices and plot (given L, alpha, beta)
