@@ -94,7 +94,7 @@ clc
 
 % Add paths
 Path_Code_12 = fullfile(Path_MainFolder, 'Code', ...
-    '12  MLE - Cubic B-Spline  with Distortion and Monotonicity (full range)');
+    '12  MLE - Cubic B-Spline with Distortion and Monotonicity (full range)');
 addpath(Path_Code_12);
 
 % split sample
