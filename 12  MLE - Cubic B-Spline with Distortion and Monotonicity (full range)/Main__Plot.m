@@ -9,8 +9,11 @@ Path_Data        = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文
 % Path_Output      = fullfile(Path_MainFolder, 'Code', '12  Output - Quartic');
 % Path_Output_Plot = fullfile(Path_MainFolder, 'Code', '12  Output - Plot (Quartic)');
 
-Path_Output      = fullfile(Path_MainFolder, 'Code', '12  Output - Quintic');
-Path_Output_Plot = fullfile(Path_MainFolder, 'Code', '12  Output - Plot (Quintic)');
+% Path_Output      = fullfile(Path_MainFolder, 'Code', '12  Output - Quintic');
+% Path_Output_Plot = fullfile(Path_MainFolder, 'Code', '12  Output - Plot (Quintic)');
+
+Path_Output      = fullfile(Path_MainFolder, 'Code', '12  Output - Sextic');
+Path_Output_Plot = fullfile(Path_MainFolder, 'Code', '12  Output - Plot (Sextic)');
 
 
 %% Load the data
@@ -113,17 +116,31 @@ set(groot, 'defaultLineMarkerFaceColor','auto');
 % };
 
 % Quintic
-n_degree = 5;
+% n_degree = 5;
+% param_list = {
+%     % --- Distorted cases ---
+%     struct('b', 6, 'alpha', 1.00, 'beta', 0.90)
+%     struct('b', 7, 'alpha', 1.00, 'beta', 0.90)
+%     struct('b', 8, 'alpha', 1.00, 'beta', 0.90)
+% 
+%     % --- Undistorted cases ---
+%     struct('b', 6, 'alpha', 1.00, 'beta', 1.00)
+%     struct('b', 7, 'alpha', 1.00, 'beta', 1.00)
+%     struct('b', 8, 'alpha', 1.00, 'beta', 1.00)
+% };
+
+% Quintic
+n_degree = 6;
 param_list = {
     % --- Distorted cases ---
-    struct('b', 6, 'alpha', 1.00, 'beta', 0.90)
     struct('b', 7, 'alpha', 1.00, 'beta', 0.90)
     struct('b', 8, 'alpha', 1.00, 'beta', 0.90)
+    struct('b', 9, 'alpha', 1.00, 'beta', 1.00)
     
     % --- Undistorted cases ---
-    struct('b', 6, 'alpha', 1.00, 'beta', 1.00)
     struct('b', 7, 'alpha', 1.00, 'beta', 1.00)
     struct('b', 8, 'alpha', 1.00, 'beta', 1.00)
+    struct('b', 9, 'alpha', 1.00, 'beta', 1.00)
 };
 
 
@@ -380,8 +397,8 @@ for m = 1:length(measures)
         % 設定 Y 軸範圍 (可依據實際結果微調)
         switch measure_key
             case 'ARA', ylim([0, 4]);   case 'RRA', ylim([0, 4]);
-            case 'AP',  ylim([3, 14]);  case 'RP',  ylim([3, 14]);
-            case 'AT',  ylim([2, 11]);  case 'RT',  ylim([2, 11]);
+            case 'AP',  ylim([0, 14]);  case 'RP',  ylim([0, 14]);
+            case 'AT',  ylim([0, 20]);  case 'RT',  ylim([0, 20]);
         end
         
         legend('show', 'Location', 'northeast', 'Box', 'off', 'FontSize', 11);

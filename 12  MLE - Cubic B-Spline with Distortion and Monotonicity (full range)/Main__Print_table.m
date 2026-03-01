@@ -2,7 +2,8 @@ clear; clc;
 Path_MainFolder = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel';
 % Path_Output = fullfile(Path_MainFolder, 'Code', '12  Output');
 % Path_Output = fullfile(Path_MainFolder, 'Code', '12  Output - Quartic');
-Path_Output = fullfile(Path_MainFolder, 'Code', '12  Output - Quintic');
+% Path_Output = fullfile(Path_MainFolder, 'Code', '12  Output - Quintic');
+Path_Output = fullfile(Path_MainFolder, 'Code', '12  Output - Sextic');
 
 
 %% Summarize MLE Results
@@ -10,7 +11,7 @@ Path_Output = fullfile(Path_MainFolder, 'Code', '12  Output - Quintic');
 folder  = Path_Output;
 files   = dir(fullfile(folder, 'MLE_BSpline_b_*.mat'));
 S       = containers.Map('KeyType','char','ValueType','any');
-b_range = 6:8; 
+b_range = 7:9; 
 
 init_struct = struct('alpha', NaN, 'beta', NaN);
 for b = b_range
