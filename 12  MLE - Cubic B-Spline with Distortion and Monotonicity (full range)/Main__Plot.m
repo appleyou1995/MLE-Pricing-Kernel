@@ -2,10 +2,15 @@ clear; clc;
 
 Path_MainFolder  = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel';
 Path_Data        = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\CDI Method';
+
 % Path_Output      = fullfile(Path_MainFolder, 'Code', '12  Output');
 % Path_Output_Plot = fullfile(Path_MainFolder, 'Code', '12  Output - Plot');
-Path_Output      = fullfile(Path_MainFolder, 'Code', '12  Output - Quartic');
-Path_Output_Plot = fullfile(Path_MainFolder, 'Code', '12  Output - Plot (Quartic)');
+
+% Path_Output      = fullfile(Path_MainFolder, 'Code', '12  Output - Quartic');
+% Path_Output_Plot = fullfile(Path_MainFolder, 'Code', '12  Output - Plot (Quartic)');
+
+Path_Output      = fullfile(Path_MainFolder, 'Code', '12  Output - Quintic');
+Path_Output_Plot = fullfile(Path_MainFolder, 'Code', '12  Output - Plot (Quintic)');
 
 
 %% Load the data
@@ -76,6 +81,8 @@ set(groot, 'defaultLineMarkerFaceColor','auto');
 
 %% Parameter sets & Plot Groups
 
+% Cubic
+% n_degree = 3;
 % param_list = {
 %     struct('b',4,'alpha',0.95,'beta',0.90)
 %     struct('b',5,'alpha',1.00,'beta',0.90)
@@ -91,24 +98,43 @@ set(groot, 'defaultLineMarkerFaceColor','auto');
 %     struct('b',9,'alpha',1.00,'beta',1.00)
 % };
 
+% Quartic
+% n_degree = 4;
+% param_list = {
+%     % --- Distorted cases ---
+%     struct('b', 4, 'alpha', 0.95, 'beta', 0.90)
+%     struct('b', 5, 'alpha', 1.00, 'beta', 0.90)
+%     struct('b', 6, 'alpha', 1.00, 'beta', 0.90)
+% 
+%     % --- Undistorted cases ---
+%     struct('b', 4, 'alpha', 1.00, 'beta', 1.00)
+%     struct('b', 5, 'alpha', 1.00, 'beta', 1.00)
+%     struct('b', 6, 'alpha', 1.00, 'beta', 1.00)
+% };
+
+% Quintic
+n_degree = 5;
 param_list = {
     % --- Distorted cases ---
-    struct('b', 4, 'alpha', 0.95, 'beta', 0.90)
-    struct('b', 5, 'alpha', 1.00, 'beta', 0.90)
     struct('b', 6, 'alpha', 1.00, 'beta', 0.90)
+    struct('b', 7, 'alpha', 1.00, 'beta', 0.90)
+    struct('b', 8, 'alpha', 1.00, 'beta', 0.90)
     
     % --- Undistorted cases ---
-    struct('b', 4, 'alpha', 1.00, 'beta', 1.00)
-    struct('b', 5, 'alpha', 1.00, 'beta', 1.00)
     struct('b', 6, 'alpha', 1.00, 'beta', 1.00)
+    struct('b', 7, 'alpha', 1.00, 'beta', 1.00)
+    struct('b', 8, 'alpha', 1.00, 'beta', 1.00)
 };
+
+
 
 % 設定繪圖群組：前半為 Distorted，後半組為 Undistorted
 plot_groups = {
-    struct('indices', 1:3,  'suffix', 'distorted',   'title', 'Distorted')
+    struct('indices', 1:3, 'suffix', 'distorted',   'title', 'Distorted')
     struct('indices', 4:6, 'suffix', 'undistorted', 'title', 'Undistorted')
 };
 
+k_order = n_degree + 1;
 tol = 1e-9;
 files = dir(fullfile(Path_Output, 'MLE_BSpline_b_*.mat'));
 colors = get(groot, 'defaultAxesColorOrder');
@@ -146,9 +172,7 @@ for g = 1:numel(plot_groups)
         
         if isempty(chosen_file), continue; end
         
-        % --- Quartic B-spline 設定 ---
-        n        = 4;           % Quartic
-        k_order  = n + 1;    
+        % --- B-spline 設定 ---  
         min_knot = Global_Min_R;
         max_knot = Global_Max_R;
         num_basis_function = p.b + 1;
@@ -170,7 +194,7 @@ for g = 1:numel(plot_groups)
     ylabel('$M(R)$');
     grid on;
     xlim([0.8 1.2]);
-    ylim([0   1.8]);
+    ylim([0   0.65]);
     legend('show', 'Location', 'northeast', 'Box', 'off', 'FontSize', 11);
     
     out_name = sprintf('plot_M_curve_Group_%s.png', group.suffix);
@@ -217,9 +241,7 @@ for g = 1:numel(plot_groups)
         
         if isempty(chosen_file), continue; end
         
-        % Quartic B-spline 基礎矩陣預先計算
-        n        = 4;
-        k_order  = n + 1;    
+        % B-spline  
         num_basis_function = p.b + 1;
         num_breaks = num_basis_function - k_order + 2;
         breaks = linspace(Global_Min_R, Global_Max_R, num_breaks);
@@ -249,7 +271,7 @@ for g = 1:numel(plot_groups)
     xlim([min(date_objs), max(date_objs)]);
     % ylim([-0.09 0.03]);    
     xtickformat('yyyy');
-    legend('show', 'Location', 'southwest', 'Box', 'off', 'FontSize', 11);
+    legend('show', 'Location', 'best', 'Box', 'off', 'FontSize', 11);
     
     out_name = sprintf('plot_delta_Group_%s.png', group.suffix);
     exportgraphics(fig, fullfile(Path_Output_Plot, out_name), 'Resolution', 300);
@@ -281,9 +303,7 @@ for idx = 1:length(param_list)
     
     if isempty(chosen_file), continue; end
     
-    % Quartic B-Spline Derivatives
-    n        = 4; 
-    k_order  = n + 1;    
+    % B-Spline Derivatives
     num_basis_function = p.b + 1;
     num_breaks = num_basis_function - k_order + 2;
     breaks = linspace(Global_Min_R, Global_Max_R, num_breaks);
@@ -360,8 +380,8 @@ for m = 1:length(measures)
         % 設定 Y 軸範圍 (可依據實際結果微調)
         switch measure_key
             case 'ARA', ylim([0, 4]);   case 'RRA', ylim([0, 4]);
-            case 'AP',  ylim([0, 13]);  case 'RP',  ylim([0, 13]);
-            case 'AT',  ylim([0, 11]);  case 'RT',  ylim([0, 11]);
+            case 'AP',  ylim([3, 14]);  case 'RP',  ylim([3, 14]);
+            case 'AT',  ylim([2, 11]);  case 'RT',  ylim([2, 11]);
         end
         
         legend('show', 'Location', 'northeast', 'Box', 'off', 'FontSize', 11);
@@ -404,8 +424,8 @@ for i = 1:length(param_list)
     Basis_Precomputed = cell(T_len, 1);
     
     % Quartic B-spline 設定
-    n        = 4;
-    k_order  = n + 1;    
+    n_degree        = 4;
+    k_order  = n_degree + 1;    
     num_basis_function = p.b + 1;
     num_breaks = num_basis_function - k_order + 2;
     breaks = linspace(Global_Min_R, Global_Max_R, num_breaks);
@@ -517,8 +537,8 @@ for k = 1:numel(targets)
             % --- 計算 M Curve ---
             theta_hat = S.theta_hat;
             
-            n        = 3;
-            k_order  = n + 1;    
+            n_degree        = 3;
+            k_order  = n_degree + 1;    
             min_knot = Global_Min_R;
             max_knot = Global_Max_R;
             num_basis_function = b_tar + 1;
@@ -614,8 +634,8 @@ for idx = 1:length(param_list)
     
     % ----- B-Spline Derivatives -----
     % Reconstruct Knots
-    n        = 3;
-    k_order  = n + 1;    
+    n_degree        = 3;
+    k_order  = n_degree + 1;    
     min_knot = Global_Min_R;
     max_knot = Global_Max_R;
     num_basis_function = b_target + 1;
@@ -825,8 +845,8 @@ for i = 1:length(param_list)
     Basis_Precomputed = cell(T, 1);
     
     % Knots
-    n        = 3;
-    k_order  = n + 1;    
+    n_degree        = 3;
+    k_order  = n_degree + 1;    
     min_knot = Global_Min_R;
     max_knot = Global_Max_R;
     num_basis_function = b_tar + 1;
@@ -922,8 +942,8 @@ for i = 1:length(param_list)
     T = length(Realized_Return.realized_ret);
     Basis_Precomputed = cell(T, 1);
     
-    n        = 3;
-    k_order  = n + 1;    
+    n_degree        = 3;
+    k_order  = n_degree + 1;    
     min_knot = Global_Min_R;
     max_knot = Global_Max_R;
     num_basis_function = b_tar + 1;
