@@ -3,7 +3,8 @@ clear; clc;
 Path_MainFolder  = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel';
 Path_Data        = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\CDI Method';
 
-% Path_Output      = fullfile(Path_MainFolder, 'Code', '12  Output');
+Path_Output      = fullfile(Path_MainFolder, 'Code', '12  Output');
+Path_Output_Plot = fullfile(Path_MainFolder, 'Code', '12  Output - Plot (Cubic)');
 % Path_Output_Plot = fullfile(Path_MainFolder, 'Code', '12  Output - Plot');
 
 % Path_Output      = fullfile(Path_MainFolder, 'Code', '12  Output - Quartic');
@@ -12,8 +13,8 @@ Path_Data        = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文
 % Path_Output      = fullfile(Path_MainFolder, 'Code', '12  Output - Quintic');
 % Path_Output_Plot = fullfile(Path_MainFolder, 'Code', '12  Output - Plot (Quintic)');
 
-Path_Output      = fullfile(Path_MainFolder, 'Code', '12  Output - Sextic');
-Path_Output_Plot = fullfile(Path_MainFolder, 'Code', '12  Output - Plot (Sextic)');
+% Path_Output      = fullfile(Path_MainFolder, 'Code', '12  Output - Sextic');
+% Path_Output_Plot = fullfile(Path_MainFolder, 'Code', '12  Output - Plot (Sextic)');
 
 
 %% Load the data
@@ -101,18 +102,32 @@ set(groot, 'defaultLineMarkerFaceColor','auto');
 %     struct('b',9,'alpha',1.00,'beta',1.00)
 % };
 
+% Cubic
+n_degree = 3;
+param_list = {
+    % --- Distorted cases ---
+    struct('b', 4, 'alpha', 0.95, 'beta', 0.90)
+    struct('b', 5, 'alpha', 1.00, 'beta', 0.90)
+    struct('b', 6, 'alpha', 1.00, 'beta', 0.90)
+
+    % --- Undistorted cases ---
+    struct('b', 4, 'alpha', 1.00, 'beta', 1.00)
+    struct('b', 5, 'alpha', 1.00, 'beta', 1.00)
+    struct('b', 6, 'alpha', 1.00, 'beta', 1.00)
+};
+
 % Quartic
 % n_degree = 4;
 % param_list = {
 %     % --- Distorted cases ---
-%     struct('b', 4, 'alpha', 0.95, 'beta', 0.90)
 %     struct('b', 5, 'alpha', 1.00, 'beta', 0.90)
 %     struct('b', 6, 'alpha', 1.00, 'beta', 0.90)
+%     struct('b', 7, 'alpha', 1.00, 'beta', 0.90)
 % 
 %     % --- Undistorted cases ---
-%     struct('b', 4, 'alpha', 1.00, 'beta', 1.00)
 %     struct('b', 5, 'alpha', 1.00, 'beta', 1.00)
 %     struct('b', 6, 'alpha', 1.00, 'beta', 1.00)
+%     struct('b', 7, 'alpha', 1.00, 'beta', 1.00)
 % };
 
 % Quintic
@@ -130,18 +145,18 @@ set(groot, 'defaultLineMarkerFaceColor','auto');
 % };
 
 % Quintic
-n_degree = 6;
-param_list = {
-    % --- Distorted cases ---
-    struct('b', 7, 'alpha', 1.00, 'beta', 0.90)
-    struct('b', 8, 'alpha', 1.00, 'beta', 0.90)
-    struct('b', 9, 'alpha', 1.00, 'beta', 1.00)
-    
-    % --- Undistorted cases ---
-    struct('b', 7, 'alpha', 1.00, 'beta', 1.00)
-    struct('b', 8, 'alpha', 1.00, 'beta', 1.00)
-    struct('b', 9, 'alpha', 1.00, 'beta', 1.00)
-};
+% n_degree = 6;
+% param_list = {
+%     % --- Distorted cases ---
+%     struct('b', 7, 'alpha', 1.00, 'beta', 0.90)
+%     struct('b', 8, 'alpha', 1.00, 'beta', 0.90)
+%     struct('b', 9, 'alpha', 1.00, 'beta', 1.00)
+% 
+%     % --- Undistorted cases ---
+%     struct('b', 7, 'alpha', 1.00, 'beta', 1.00)
+%     struct('b', 8, 'alpha', 1.00, 'beta', 1.00)
+%     struct('b', 9, 'alpha', 1.00, 'beta', 1.00)
+% };
 
 
 
@@ -211,7 +226,7 @@ for g = 1:numel(plot_groups)
     ylabel('$M(R)$');
     grid on;
     xlim([0.8 1.2]);
-    ylim([0   0.65]);
+    % ylim([0   0.65]);
     legend('show', 'Location', 'northeast', 'Box', 'off', 'FontSize', 11);
     
     out_name = sprintf('plot_M_curve_Group_%s.png', group.suffix);
@@ -397,8 +412,8 @@ for m = 1:length(measures)
         % 設定 Y 軸範圍 (可依據實際結果微調)
         switch measure_key
             case 'ARA', ylim([0, 4]);   case 'RRA', ylim([0, 4]);
-            case 'AP',  ylim([0, 14]);  case 'RP',  ylim([0, 14]);
-            case 'AT',  ylim([0, 20]);  case 'RT',  ylim([0, 20]);
+            case 'AP',  ylim([0, 12]);  case 'RP',  ylim([0, 12]);
+            case 'AT',  ylim([0, 12]);  case 'RT',  ylim([0, 12]);
         end
         
         legend('show', 'Location', 'northeast', 'Box', 'off', 'FontSize', 11);
