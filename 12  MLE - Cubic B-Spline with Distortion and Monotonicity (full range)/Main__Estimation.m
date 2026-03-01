@@ -85,7 +85,9 @@ Global_Min_R = Global_Min_R * 0.9;
 Global_Max_R = Global_Max_R * 1.1;
 
 % Path_Output = fullfile(Path_MainFolder, 'Code', '12  Output');
-Path_Output = fullfile(Path_MainFolder, 'Code', '12  Output - Quartic');
+% Path_Output = fullfile(Path_MainFolder, 'Code', '12  Output - Quartic');
+Path_Output = fullfile(Path_MainFolder, 'Code', '12  Output - Quintic');
+% Path_Output = fullfile(Path_MainFolder, 'Code', '12  Output - Sextic');
 
 
 %% Estimation: MLE over (alpha, beta, b) - Cubic B-Spline
@@ -102,7 +104,8 @@ Realized_Return_front = Realized_Return(1:T1, :);
 Risk_Free_Rate_front  = Risk_Free_Rate(1:T1);
 
 % setting
-b_grid = [4, 5, 6, 7, 8, 9];
+% b_grid = [4, 5, 6, 7, 8, 9];
+b_grid = [6, 7, 8];
 use_delta = true;
 
 % 1. 建立任務列表 (Flatten loops)
