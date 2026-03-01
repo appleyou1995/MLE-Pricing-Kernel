@@ -96,23 +96,17 @@ param_list = {
     struct('b', 4, 'alpha', 0.95, 'beta', 0.90)
     struct('b', 5, 'alpha', 1.00, 'beta', 0.90)
     struct('b', 6, 'alpha', 1.00, 'beta', 0.90)
-    struct('b', 7, 'alpha', 1.00, 'beta', 0.90)
-    struct('b', 8, 'alpha', 0.95, 'beta', 1.10)
-    struct('b', 9, 'alpha', 1.00, 'beta', 1.10)
     
     % --- Undistorted cases ---
     struct('b', 4, 'alpha', 1.00, 'beta', 1.00)
     struct('b', 5, 'alpha', 1.00, 'beta', 1.00)
     struct('b', 6, 'alpha', 1.00, 'beta', 1.00)
-    struct('b', 7, 'alpha', 1.00, 'beta', 1.00)
-    struct('b', 8, 'alpha', 1.00, 'beta', 1.00)
-    struct('b', 9, 'alpha', 1.00, 'beta', 1.00)
 };
 
-% 設定繪圖群組：前六組為 Distorted，後六組為 Undistorted
+% 設定繪圖群組：前半為 Distorted，後半組為 Undistorted
 plot_groups = {
-    struct('indices', 1:6,  'suffix', 'distorted',   'title', 'Distorted')
-    struct('indices', 7:12, 'suffix', 'undistorted', 'title', 'Undistorted')
+    struct('indices', 1:3,  'suffix', 'distorted',   'title', 'Distorted')
+    struct('indices', 4:6, 'suffix', 'undistorted', 'title', 'Undistorted')
 };
 
 tol = 1e-9;
@@ -365,9 +359,9 @@ for m = 1:length(measures)
         
         % 設定 Y 軸範圍 (可依據實際結果微調)
         switch measure_key
-            case 'ARA', ylim([0, 5]);   case 'RRA', ylim([0, 5]);
-            case 'AP',  ylim([0, 16]);  case 'RP',  ylim([0, 16]);
-            case 'AT',  ylim([0, 30]);  case 'RT',  ylim([0, 30]);
+            case 'ARA', ylim([0, 4]);   case 'RRA', ylim([0, 4]);
+            case 'AP',  ylim([0, 13]);  case 'RP',  ylim([0, 13]);
+            case 'AT',  ylim([0, 11]);  case 'RT',  ylim([0, 11]);
         end
         
         legend('show', 'Location', 'northeast', 'Box', 'off', 'FontSize', 11);
