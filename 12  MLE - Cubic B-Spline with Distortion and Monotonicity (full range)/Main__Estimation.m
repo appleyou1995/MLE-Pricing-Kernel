@@ -46,12 +46,12 @@ clear Risk_Free_Rate_All data FileName input_filename year
 
 diff = 0.05;
 
-alpha_min  = 0.9;
-alpha_max  = 1.1;
+alpha_min  = 0.8;
+alpha_max  = 1.2;
 alpha_grid = alpha_min:diff:alpha_max;
 
-beta_min  = 0.9;
-beta_max  = 1.1;
+beta_min  = 0.8;
+beta_max  = 1.2;
 beta_grid = beta_min:diff:beta_max;
 
 
@@ -105,7 +105,7 @@ Risk_Free_Rate_front  = Risk_Free_Rate(1:T1);
 
 % setting
 % b_grid = [4, 5, 6, 7, 8, 9];
-b_grid = [6, 7, 8];
+b_grid = 6;
 use_delta = true;
 
 % 1. 建立任務列表 (Flatten loops)
