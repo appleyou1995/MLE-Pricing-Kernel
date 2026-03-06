@@ -73,16 +73,16 @@ clear col_data i this_field fields
 param_list = {
     struct('L',1,'alpha',0.95,'beta',0.90)
     struct('L',2,'alpha',0.95,'beta',0.90)
-    struct('L',3,'alpha',1.00,'beta',0.90)
+    % struct('L',3,'alpha',1.00,'beta',0.90)
     struct('L',1,'alpha',1.00,'beta',1.00)
     struct('L',2,'alpha',1.00,'beta',1.00)
-    struct('L',3,'alpha',1.00,'beta',1.00)
+    % struct('L',3,'alpha',1.00,'beta',1.00)
 };
 
 % 設定繪圖群組：前三組為 Distorted，後三組為 Undistorted
 plot_groups = {
-    struct('indices', 1:3, 'suffix', 'distorted',   'title', 'Distorted M-Curve')
-    struct('indices', 4:6, 'suffix', 'undistorted', 'title', 'Undistorted M-Curve')
+    struct('indices', 1:2, 'suffix', 'distorted',   'title', 'Distorted M-Curve')
+    struct('indices', 3:4, 'suffix', 'undistorted', 'title', 'Undistorted M-Curve')
 };
 
 
@@ -209,9 +209,9 @@ for g = 1:numel(plot_groups)
     ylabel('$\delta_t$', 'Rotation', 0, 'HorizontalAlignment', 'right');
     grid on;
     xlim([min(date_objs), max(date_objs)]);
-    ylim([-0.09 0.03]);    
+    ylim([-0.01 0.03]);    
     xtickformat('yyyy');
-    legend('show', 'Location', 'southwest', 'Box', 'off', 'FontSize', 11);
+    legend('show', 'Location', 'northwest', 'Box', 'off', 'FontSize', 11);
     
     out_name = sprintf('plot_delta_Group_%s.png', group.suffix);
     exportgraphics(fig, fullfile(Path_Output_Plot, out_name), 'Resolution', 300);
@@ -294,9 +294,9 @@ for m = 1:length(measures_to_plot)
         
         % 套用 Y 軸範圍
         switch measure_key
-            case 'ARA', ylim([0, 4.5]); case 'RRA', ylim([0, 3.6]);
-            case 'AP',  ylim([0, 10]);  case 'RP',  ylim([0, 10]);
-            case 'AT',  ylim([0, 10]);  case 'RT',  ylim([0, 10]);
+            case 'ARA', ylim([0, 3]); case 'RRA', ylim([0, 2.5]);
+            case 'AP',  ylim([0, 5]); case 'RP',  ylim([0, 4]);
+            case 'AT',  ylim([0, 7]); case 'RT',  ylim([0, 6]);
         end
         
         legend('show', 'Location', 'northeast', 'Box', 'off', 'FontSize', 11);
