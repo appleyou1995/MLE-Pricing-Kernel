@@ -3,15 +3,15 @@ clear; clc;
 Path_MainFolder  = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel';
 Path_Data        = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\CDI Method';
 
-Path_Output      = fullfile(Path_MainFolder, 'Code', '12  Output');
-Path_Output_Plot = fullfile(Path_MainFolder, 'Code', '12  Output - Plot (Cubic)');
+% Path_Output      = fullfile(Path_MainFolder, 'Code', '12  Output');
+% Path_Output_Plot = fullfile(Path_MainFolder, 'Code', '12  Output - Plot (Cubic)');
 % Path_Output_Plot = fullfile(Path_MainFolder, 'Code', '12  Output - Plot');
 
 % Path_Output      = fullfile(Path_MainFolder, 'Code', '12  Output - Quartic');
 % Path_Output_Plot = fullfile(Path_MainFolder, 'Code', '12  Output - Plot (Quartic)');
 
-% Path_Output      = fullfile(Path_MainFolder, 'Code', '12  Output - Quintic');
-% Path_Output_Plot = fullfile(Path_MainFolder, 'Code', '12  Output - Plot (Quintic)');
+Path_Output      = fullfile(Path_MainFolder, 'Code', '12  Output - Quintic');
+Path_Output_Plot = fullfile(Path_MainFolder, 'Code', '12  Output - Plot (Quintic)');
 
 % Path_Output      = fullfile(Path_MainFolder, 'Code', '12  Output - Sextic');
 % Path_Output_Plot = fullfile(Path_MainFolder, 'Code', '12  Output - Plot (Sextic)');
@@ -102,21 +102,21 @@ set(groot, 'defaultLineMarkerFaceColor','auto');
 %     struct('b',9,'alpha',1.00,'beta',1.00)
 % };
 
-% Cubic
-n_degree = 3;
-param_list = {
-    % --- Distorted cases ---
-    struct('b', 4, 'alpha', 0.95, 'beta', 0.90)
-    struct('b', 5, 'alpha', 1.00, 'beta', 0.90)
-    struct('b', 6, 'alpha', 1.00, 'beta', 0.90)
+% % Cubic
+% n_degree = 3;
+% param_list = {
+%     % --- Distorted cases ---
+%     struct('b', 4, 'alpha', 0.95, 'beta', 0.90)
+%     struct('b', 5, 'alpha', 1.00, 'beta', 0.90)
+%     struct('b', 6, 'alpha', 1.00, 'beta', 0.90)
+% 
+%     % --- Undistorted cases ---
+%     struct('b', 4, 'alpha', 1.00, 'beta', 1.00)
+%     struct('b', 5, 'alpha', 1.00, 'beta', 1.00)
+%     struct('b', 6, 'alpha', 1.00, 'beta', 1.00)
+% };
 
-    % --- Undistorted cases ---
-    struct('b', 4, 'alpha', 1.00, 'beta', 1.00)
-    struct('b', 5, 'alpha', 1.00, 'beta', 1.00)
-    struct('b', 6, 'alpha', 1.00, 'beta', 1.00)
-};
-
-% Quartic
+% % Quartic
 % n_degree = 4;
 % param_list = {
 %     % --- Distorted cases ---
@@ -131,20 +131,20 @@ param_list = {
 % };
 
 % Quintic
-% n_degree = 5;
-% param_list = {
-%     % --- Distorted cases ---
-%     struct('b', 6, 'alpha', 1.00, 'beta', 0.90)
-%     struct('b', 7, 'alpha', 1.00, 'beta', 0.90)
-%     struct('b', 8, 'alpha', 1.00, 'beta', 0.90)
-% 
-%     % --- Undistorted cases ---
-%     struct('b', 6, 'alpha', 1.00, 'beta', 1.00)
-%     struct('b', 7, 'alpha', 1.00, 'beta', 1.00)
-%     struct('b', 8, 'alpha', 1.00, 'beta', 1.00)
-% };
+n_degree = 5;
+param_list = {
+    % --- Distorted cases ---
+    struct('b', 6, 'alpha', 1.00, 'beta', 0.90)
+    % struct('b', 7, 'alpha', 1.00, 'beta', 0.90)
+    % struct('b', 8, 'alpha', 1.00, 'beta', 0.90)
 
-% Quintic
+    % --- Undistorted cases ---
+    struct('b', 6, 'alpha', 1.00, 'beta', 1.00)
+    % struct('b', 7, 'alpha', 1.00, 'beta', 1.00)
+    % struct('b', 8, 'alpha', 1.00, 'beta', 1.00)
+};
+
+% % Sextic
 % n_degree = 6;
 % param_list = {
 %     % --- Distorted cases ---
@@ -162,8 +162,8 @@ param_list = {
 
 % 設定繪圖群組：前半為 Distorted，後半組為 Undistorted
 plot_groups = {
-    struct('indices', 1:3, 'suffix', 'distorted',   'title', 'Distorted')
-    struct('indices', 4:6, 'suffix', 'undistorted', 'title', 'Undistorted')
+    struct('indices', 1, 'suffix', 'distorted',   'title', 'Distorted')
+    struct('indices', 2, 'suffix', 'undistorted', 'title', 'Undistorted')
 };
 
 k_order = n_degree + 1;
@@ -303,7 +303,7 @@ for g = 1:numel(plot_groups)
     xlim([min(date_objs), max(date_objs)]);
     % ylim([-0.09 0.03]);    
     xtickformat('yyyy');
-    legend('show', 'Location', 'best', 'Box', 'off', 'FontSize', 11);
+    legend('show', 'Location', 'southwest', 'Box', 'off', 'FontSize', 11);
     
     out_name = sprintf('plot_delta_Group_%s.png', group.suffix);
     exportgraphics(fig, fullfile(Path_Output_Plot, out_name), 'Resolution', 300);
@@ -411,9 +411,9 @@ for m = 1:length(measures)
         
         % 設定 Y 軸範圍 (可依據實際結果微調)
         switch measure_key
-            case 'ARA', ylim([0, 4]);   case 'RRA', ylim([0, 4]);
-            case 'AP',  ylim([0, 12]);  case 'RP',  ylim([0, 12]);
-            case 'AT',  ylim([0, 12]);  case 'RT',  ylim([0, 12]);
+            case 'ARA', ylim([0, 5]);   case 'RRA', ylim([0, 5]);
+            case 'AP',  ylim([4, 12]);  case 'RP',  ylim([4, 12]);
+            case 'AT',  ylim([4, 12]);  case 'RT',  ylim([4, 12]);
         end
         
         legend('show', 'Location', 'northeast', 'Box', 'off', 'FontSize', 11);
