@@ -1,4 +1,4 @@
-%% Log-Likelihood Function (Cubic B-Spline Version)
+%% Log-Likelihood Function
 
 function [LL, BIC, delta_vec, M_vec, pit_vec] = log_likelihood_bspline(theta, R_vec, Rf_vec, ...
     Basis_Precomputed, Smooth_AllR, Smooth_AllR_RND, months, use_delta, alpha, beta)
