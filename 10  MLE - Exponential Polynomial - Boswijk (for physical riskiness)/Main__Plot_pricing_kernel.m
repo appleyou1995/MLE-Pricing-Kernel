@@ -83,8 +83,8 @@ end
 
 xlim([x_min x_max]);
 ylim([0.65 1.65]);
-xlabel('Gross return $R_{t+1}$');
-ylabel('Average pricing kernel $\bar{M}(R)$');
+xlabel('gross return $R_{T}$');
+ylabel('average pricing kernel $\bar{M_t}(R_T)$');
 legend({'TTM = 30', 'TTM = 60', 'TTM = 90', 'TTM = 180'}, ...
        'Location','best','Box','off');
 
