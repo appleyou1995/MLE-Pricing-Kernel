@@ -377,6 +377,59 @@ for idx = 1:length(param_list)
     end
     csv_name = sprintf('RiskTable_b_%d_alpha_%.2f_beta_%.2f.csv', p.b, p.alpha, p.beta);
     writetable(T_save, fullfile(Path_Output, csv_name));
+
+
+    % ============================================================
+    %  Trend Check Table (0.8, 1.0, 1.2 + 區間內 Min/Max)
+    % ============================================================
+    target_R_points = [0.8, 1.0, 1.2];
+    trend_data = struct();
+    trend_data.Measure = measures(:); 
+    
+    % 1. 建立 0.8 到 1.2 的遮罩，用來抓取區間內所有數據點
+    range_mask = (R_axis >= 0.8) & (R_axis <= 1.2);
+    
+    % 2. 計算特定點 (0.8, 1.0, 1.2) 的值
+    for k = 1:length(target_R_points)
+        r_val = target_R_points(k);
+        col_name = sprintf('Val_at_%s', strrep(num2str(r_val), '.', '_'));
+        
+        vals = zeros(length(measures), 1);
+        for m = 1:length(measures)
+            key = measures{m};
+            y_data = risk_pref.(key);
+            vals(m) = interp1(R_axis, y_data, r_val, 'pchip');
+        end
+        trend_data.(col_name) = vals;
+    end
+    
+    % 3. 新增：找出 0.8~1.2 區間內真正的最大與最小值 (解決微笑曲線問題)
+    min_vals = zeros(length(measures), 1);
+    max_vals = zeros(length(measures), 1);
+    for m = 1:length(measures)
+        key = measures{m};
+        % 只取出 R 在 0.8 到 1.2 之間的數值陣列
+        y_in_range = risk_pref.(key)(range_mask);
+        min_vals(m) = min(y_in_range);
+        max_vals(m) = max(y_in_range);
+    end
+    trend_data.Min_08_12 = min_vals;
+    trend_data.Max_08_12 = max_vals;
+    
+    T_trend = struct2table(trend_data);
+    
+    % 數值格式化 (保留四位小數)
+    varNamesTrend = T_trend.Properties.VariableNames;
+    for v = 1:numel(varNamesTrend)
+        if isnumeric(T_trend.(varNamesTrend{v}))
+            T_trend.(varNamesTrend{v}) = round(T_trend.(varNamesTrend{v}), 4);
+        end
+    end
+    
+    % 儲存檔案
+    trend_csv_name = sprintf('TrendCheck_b_%d_alpha_%.2f_beta_%.2f.csv', p.b, p.alpha, p.beta);
+    writetable(T_trend, fullfile(Path_Output, trend_csv_name));
+    fprintf('Saved updated trend check: %s\n', trend_csv_name);
 end
 
 
@@ -627,7 +680,7 @@ saveas(gcf, fullfile(Path_Output_Plot, out_png));
 
 clc
 colors = get(groot, 'defaultAxesColorOrder');
-measures = {'ARA','RRA','AP','RP','AT','RT','A5','R5','A6','R6'}; 
+measures = {'ARA','RRA','AP','RP','AT','RT'}; 
 
 files = dir(fullfile(Path_Output, 'MLE_BSpline_b_*.mat'));
 
@@ -694,15 +747,6 @@ for idx = 1:length(param_list)
     M1    = S_1 .* M_val;
     M2    = (S_2 + S_1.^2) .* M_val;
     M3    = (S_3 + 3*S_2.*S_1 + S_1.^3) .* M_val;
-
-    % --- M4 (假設 S4=0) ---
-    Bracket_4 = 4.*S_3.*S_1 + 3.*S_2.^2 + 6.*S_2.*S_1.^2 + S_1.^4;
-    M4        = Bracket_4 .* M_val;
-
-    % --- M5 (假設 S4=0, S5=0) ---
-    Bracket_5 = 10.*S_3.*S_2 + 10.*S_3.*S_1.^2 + 15.*S_1.*S_2.^2 + ...
-                10.*(S_1.^3).*S_2 + S_1.^5;
-    M5        = Bracket_5 .* M_val;
     
     % --- Risk Indices ---
     % ARA = -M' / M = -S'
@@ -716,25 +760,14 @@ for idx = 1:length(param_list)
     % AT = -M''' / M'' 
     risk_pref.AT  = -M3 ./ M2;
     risk_pref.RT  = R_axis .* risk_pref.AT;
-
-    % Order 5: -M4 / M3
-    risk_pref.A5  = -M4 ./ M3;
-    risk_pref.R5  = R_axis .* risk_pref.A5;
-    
-    % Order 6: -M5 / M4
-    risk_pref.A6  = -M5 ./ M4;
-    risk_pref.R6    = R_axis .* risk_pref.A6;
     
     % Output Table
     T_out = table(R_axis, M_val, M1, M2, M3, ...
                    risk_pref.ARA, risk_pref.RRA, ...
                    risk_pref.AP, risk_pref.RP, ...
                    risk_pref.AT, risk_pref.RT, ...
-                   risk_pref.A5, risk_pref.R5, ...
-                   risk_pref.A6, risk_pref.R6, ...
                    'VariableNames', {'R', 'M', 'M1', 'M2', 'M3', ...
-                                     'ARA', 'RRA', 'AP', 'RP', 'AT', 'RT', ...
-                                     'A5', 'R5', 'A6', 'R6'});
+                                     'ARA', 'RRA', 'AP', 'RP', 'AT', 'RT'});
     
     % Filter for saving CSV
     mask_csv = (R_axis >= 1.09) & (R_axis <= 1.11);
@@ -785,42 +818,38 @@ for idx = 1:length(param_list)
     writetable(T_trend, fullfile(Path_Output, trend_csv_name));
     fprintf('Saved trend check table: %s\n', trend_csv_name);
     
-    % Plotting
-    for m = 1:length(measures)
-        key = measures{m};
-        Y_plot = risk_pref.(key);
-        
-        fig = figure('Position',[50 80 450 400], 'Visible', 'off');
-        layout = tiledlayout(1, 1, 'TileSpacing', 'Compact', 'Padding', 'None');
-        nexttile;
-        hold on;
-        
-        plot(R_axis, Y_plot, 'LineWidth', 1.5, 'Color', colors(b_target-3,:));
-        
-        grid on; hold off;
-        xlabel('$R$', 'Interpreter', 'latex');
-        ylabel(key);
-        axis tight;
-        switch key
-            case 'ARA', y_limits = [0, 5]; 
-            case 'RRA', y_limits = [0, 5];
-            case 'AP',  y_limits = [0, 16];
-            case 'RP',  y_limits = [0, 16];
-            case 'AT',  y_limits = [0, 30];
-            case 'RT',  y_limits = [0, 30];
-            case 'A5',  y_limits = [0, 12];
-            case 'R5',  y_limits = [0, 10];
-            case 'A6',  y_limits = [0, 16];
-            case 'R6',  y_limits = [0, 14];
-            otherwise,  axis tight; y_limits = ylim;
-        end
-        ylim(y_limits);
-        xlim([0.8 1.2]);
-        
-        out_png = sprintf('%s_b_%d_alpha_%.2f_beta_%.2f.png', key, b_target, alpha_target, beta_target);
-        saveas(fig, fullfile(Path_Output_Plot, out_png));
-        close(fig);
-    end
+    % % Plotting
+    % for m = 1:length(measures)
+    %     key = measures{m};
+    %     Y_plot = risk_pref.(key);
+    % 
+    %     fig = figure('Position',[50 80 450 400], 'Visible', 'off');
+    %     layout = tiledlayout(1, 1, 'TileSpacing', 'Compact', 'Padding', 'None');
+    %     nexttile;
+    %     hold on;
+    % 
+    %     plot(R_axis, Y_plot, 'LineWidth', 1.5, 'Color', colors(b_target-3,:));
+    % 
+    %     grid on; hold off;
+    %     xlabel('$R$', 'Interpreter', 'latex');
+    %     ylabel(key);
+    %     axis tight;
+    %     switch key
+    %         case 'ARA', y_limits = [0, 5]; 
+    %         case 'RRA', y_limits = [0, 5];
+    %         case 'AP',  y_limits = [0, 16];
+    %         case 'RP',  y_limits = [0, 16];
+    %         case 'AT',  y_limits = [0, 30];
+    %         case 'RT',  y_limits = [0, 30];
+    %         otherwise,  axis tight; y_limits = ylim;
+    %     end
+    %     ylim(y_limits);
+    %     xlim([0.8 1.2]);
+    % 
+    %     out_png = sprintf('%s_b_%d_alpha_%.2f_beta_%.2f.png', key, b_target, alpha_target, beta_target);
+    %     saveas(fig, fullfile(Path_Output_Plot, out_png));
+    %     close(fig);
+    % end
 end
 
 fprintf('Risk plots & tables done.\n');
