@@ -9,7 +9,7 @@ Path_Data_02 = fullfile(Path_Data, 'Code', '02  輸出資料');
 
 %% Master Switch
 
-Target_TTM = 90;
+Target_TTM = 180;
 % [30, 60, 90, 180]
 
 Extension_Mode = 'Full';
