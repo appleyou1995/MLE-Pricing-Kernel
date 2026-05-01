@@ -1,12 +1,15 @@
 clear; clc;
+
 Path_Main = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel\Code';
+Path_Output = fullfile(Path_Main, '16  Output - Summary Table');
+
 
 %% Master Switch
 
 Target_TTM = 30;
 % [30, 60, 90, 180]
 
-Extension_Mode = 'Non_Recession';
+Extension_Mode = 'Full';
 % ['Full', 'Non_Recession', 'High_Vol', 'Low_Vol']
 
 fprintf('Current Mode: %s (TTM = %d)\n', Extension_Mode, Target_TTM);
@@ -16,19 +19,19 @@ fprintf('Current Mode: %s (TTM = %d)\n', Extension_Mode, Target_TTM);
 
 switch Extension_Mode
     case 'Full'
-        Path_Output = fullfile(Path_Main, '16  Output (TTM Comparison)');
+        Path_Result = fullfile(Path_Main, '16  Output (TTM Comparison)');
     case 'Non_Recession'
-        Path_Output = fullfile(Path_Main, '16  Output (Non-Recession Periods)');
+        Path_Result = fullfile(Path_Main, '16  Output (Non-Recession Periods)');
     case 'High_Vol'
-        Path_Output = fullfile(Path_Main, '16  Output (High vs. Low Volatility)');
+        Path_Result = fullfile(Path_Main, '16  Output (High vs. Low Volatility)');
     case 'Low_Vol'
-        Path_Output = fullfile(Path_Main, '16  Output (High vs. Low Volatility)');
+        Path_Result = fullfile(Path_Main, '16  Output (High vs. Low Volatility)');
 end
 
 
 %% Summarize MLE Results
 
-folder = Path_Output;
+folder = Path_Result;
 file_pattern = sprintf('MLE_BSpline_TTM_%d_%s_*.mat', Target_TTM, Extension_Mode);
 files = dir(fullfile(folder, file_pattern));
 
@@ -136,7 +139,7 @@ alpha_strs = arrayfun(@(x) sprintf('%.2f', x), T_matrix_ll.alpha, 'UniformOutput
 T_matrix_ll.alpha = alpha_strs;
 
 out_csv_name = sprintf('Summary_TTM_%d_%s.csv', Target_TTM, Extension_Mode);
-out_csv = fullfile(folder, out_csv_name);
+out_csv = fullfile(Path_Output, out_csv_name);
 
 csv_headers = T_matrix_ll.Properties.VariableNames;
 csv_headers{1} = 'alpha';
