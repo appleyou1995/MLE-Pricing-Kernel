@@ -1,6 +1,7 @@
 clear; clc;
 
 Path_Main = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel\Code';
+Path_Code_16 = fullfile(Path_Main, '16  MLE - B-Spline (Extension)');
 
 Path_Data    = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\CDI Method';
 Path_Data_01 = fullfile(Path_Data, 'Code', '01  輸出資料');
@@ -9,7 +10,7 @@ Path_Data_02 = fullfile(Path_Data, 'Code', '02  輸出資料');
 
 %% Master Switch
 
-Target_TTM = 180;
+Target_TTM = 30;
 % [30, 60, 90, 180]
 
 Extension_Mode = 'Full';
@@ -115,6 +116,10 @@ end
 Global_Min_R = Global_Min_R * 0.9; 
 Global_Max_R = Global_Max_R * 1.1;
 
+Bounds_File = fullfile(Path_Code_16, sprintf('Global_Bounds_TTM_%d.mat', Target_TTM));
+save(Bounds_File, 'Global_Min_R', 'Global_Max_R');
+fprintf('Global Bounds saved to: %s\n', Bounds_File);
+
 
 %% Distortion Coefficient
 
@@ -132,7 +137,6 @@ beta_grid = beta_min:diff:beta_max;
 %% Estimation
 
 % Add path
-Path_Code_16 = fullfile(Path_Main, '16  MLE - B-Spline (Extension)');
 addpath(Path_Code_16);
 
 % Setting
