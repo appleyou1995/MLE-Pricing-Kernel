@@ -44,14 +44,14 @@ clear Risk_Free_Rate_All data FileName input_filename year
 
 %% Distortion Coefficient
 
-diff = 0.05;
+diff = 0.1;
 
-alpha_min  = 0.85;
-alpha_max  = 1.10;
+alpha_min  = 0.40;
+alpha_max  = 1.40;
 alpha_grid = alpha_min:diff:alpha_max;
 
-beta_min  = 0.85;
-beta_max  = 1.10;
+beta_min  = 0.40;
+beta_max  = 1.40;
 beta_grid = beta_min:diff:beta_max;
 
 
@@ -84,7 +84,7 @@ end
 Global_Min_R = Global_Min_R * 0.9; 
 Global_Max_R = Global_Max_R * 1.1;
 
-Path_Output = fullfile(Path_MainFolder, 'Code', '15  Output');
+Path_Output = fullfile(Path_MainFolder, 'Code', '15  Output - wide');
 
 
 %% Estimation: MLE over (alpha, beta, b) - B-Spline
