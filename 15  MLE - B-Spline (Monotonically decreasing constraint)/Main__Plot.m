@@ -2,7 +2,7 @@ clear; clc;
 
 Path_MainFolder = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel';
 Path_Data       = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\CDI Method';
-Path_Output     = fullfile(Path_MainFolder, 'Code', '15  Output - with and wide');
+Path_Output     = fullfile(Path_MainFolder, 'Code', '15  Output - without and wide');
 
 
 %% Load the data
@@ -79,7 +79,7 @@ set(groot, 'defaultLineMarkerFaceColor','auto');
 n_degree = 5;
 param_list = {
     % --- Distorted cases ---
-    struct('b', 6, 'alpha', 1.00, 'beta', 0.90)
+    struct('b', 6, 'alpha', 1.10, 'beta', 0.90)
 
     % --- Undistorted cases ---
     struct('b', 6, 'alpha', 1.00, 'beta', 1.00)
@@ -425,9 +425,9 @@ for m = 1:length(measures)
         
         % 設定 Y 軸範圍 (可依據實際結果微調)
         switch measure_key
-            case 'ARA', ylim([0, 5]);   case 'RRA', ylim([0, 5]);
-            case 'AP',  ylim([4, 12]);  case 'RP',  ylim([4, 12]);
-            case 'AT',  ylim([4, 12]);  case 'RT',  ylim([4, 12]);
+            case 'ARA', ylim([0, 6]);   case 'RRA', ylim([0, 6]);
+            case 'AP',  ylim([-100, 100]);  case 'RP',  ylim([-100, 100]);
+            case 'AT',  ylim([-100, 100]);  case 'RT',  ylim([-100, 100]);
         end
         
         legend('show', 'Location', 'northeast', 'Box', 'off', 'FontSize', 11);
