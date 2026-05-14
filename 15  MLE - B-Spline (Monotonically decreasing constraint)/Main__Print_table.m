@@ -1,6 +1,6 @@
 clear; clc;
 Path_MainFolder = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel';
-Path_Output = fullfile(Path_MainFolder, 'Code', '15  Output - with and wide');
+Path_Output = fullfile(Path_MainFolder, 'Code', '15  Output - without and wide');
 
 
 %% Summarize MLE Results
@@ -137,5 +137,5 @@ disp(T_matrix_ll);
 %% Output csv
 
 out_csv = fullfile(folder, 'MLE_BSpline_estimation_summary.csv');
-writetable(T, out_csv);
+writetable(T_matrix_ll, out_csv);
 fprintf('\nSummary file saved to:\n%s\n', out_csv);
