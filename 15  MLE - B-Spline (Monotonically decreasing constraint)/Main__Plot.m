@@ -2,7 +2,7 @@ clear; clc;
 
 Path_MainFolder = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel';
 Path_Data       = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\CDI Method';
-Path_Output     = fullfile(Path_MainFolder, 'Code', '15  Output - without and wide');
+Path_Output     = fullfile(Path_MainFolder, 'Code', '15  Output - with and wide');
 
 
 %% Load the data
@@ -79,7 +79,7 @@ set(groot, 'defaultLineMarkerFaceColor','auto');
 n_degree = 5;
 param_list = {
     % --- Distorted cases ---
-    struct('b', 6, 'alpha', 1.10, 'beta', 0.90)
+    struct('b', 6, 'alpha', 1.00, 'beta', 0.90)
 
     % --- Undistorted cases ---
     struct('b', 6, 'alpha', 1.00, 'beta', 1.00)
@@ -99,7 +99,6 @@ files = dir(fullfile(Path_Output, 'MLE_BSpline_b_*.mat'));
 colors = get(groot, 'defaultAxesColorOrder');
 
 
-%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Plot M curve (Distorted vs Undistorted)
 
 % Add paths
@@ -415,11 +414,13 @@ for m = 1:length(measures)
             if isempty(risk_results{idx}), continue; end
             
             Y_plot = risk_results{idx}.(measure_key);
-            legend_str = sprintf('$b=%d, \\,\\alpha=%.2f, \\,\\beta=%.2f$', p.b, p.alpha, p.beta);
+            legend_str = sprintf('$\\alpha=%.2f, \\,\\beta=%.2f$', p.alpha, p.beta);
             plot(R_axis, Y_plot, 'LineWidth', 2, 'Color', colors(k,:), 'DisplayName', legend_str);
         end
         
-        xlabel('$R$'); ylabel(measure_key, 'Interpreter', 'none'); grid on;
+        xlabel('$R_{t+1}$');
+        ylabel(measure_key, 'Interpreter', 'none');
+        grid on;
         xlim([0.8 1.2]);
         
         % 設定 Y 軸範圍 (可依據實際結果微調)
