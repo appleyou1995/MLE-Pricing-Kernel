@@ -444,6 +444,10 @@ fprintf('Risk plots & tables done.\n');
 %% Compute PIT, Plot Histogram, and Save Statistics
 
 clc
+
+% 設定區間數量 (bins)
+num_bins = 8;
+
 fprintf('\nGenerating PIT Histograms and Statistics...\n');
 stats_list = [];
 stats_cnt = 1;
@@ -526,16 +530,18 @@ for i = 1:length(param_list)
     nexttile;
     hold on;
     
-    histogram(pit_vec, 20, 'Normalization', 'pdf', 'FaceColor', [0.7 0.7 0.7], 'EdgeColor', 'w');
+    histogram(pit_vec, num_bins, 'Normalization', 'pdf', 'FaceColor', [0.7 0.7 0.7], 'EdgeColor', 'w');
     yline(1, 'r--', 'LineWidth', 2, 'DisplayName', 'Uniform(0,1)');
     hold off;
     
     xlabel('$z_t$'); ylabel('Density');
-    xlim([0 1]); ylim([0 1.8]); grid on;
+    xlim([0 1]);
+    ylim([0 1.8]);
+    grid on;
     set(gca, 'LooseInset', get(gca, 'TightInset'));
     
     % 統一使用 exportgraphics 並輸出至 Path_Output
-    out_name = sprintf('plot_PIT_b_%d_alpha_%.2f_beta_%.2f.png', p.b, p.alpha, p.beta);
+    out_name = sprintf('plot_PIT_alpha_%.2f_beta_%.2f_bins_%d.png', p.alpha, p.beta, num_bins);
     exportgraphics(fig, fullfile(Path_Output, out_name), 'Resolution', 300);
     close(fig);
 end
@@ -548,8 +554,8 @@ if ~isempty(stats_list)
             T_stats.(vars{i}) = round(T_stats.(vars{i}), 4);
         end
     end
-    csv_filename = fullfile(Path_Output, 'PIT_Test_Statistics_BSpline.csv');
-    writetable(T_stats, csv_filename);
-    fprintf('\nStatistics saved to: %s\n', csv_filename);
+    % csv_filename = fullfile(Path_Output, 'PIT_Test_Statistics_BSpline.csv');
+    % writetable(T_stats, csv_filename);
+    % fprintf('\nStatistics saved to: %s\n', csv_filename);
 end
 fprintf('All PIT histograms and statistics completed.\n');
