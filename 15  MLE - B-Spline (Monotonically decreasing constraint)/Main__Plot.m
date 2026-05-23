@@ -2,7 +2,7 @@ clear; clc;
 
 Path_MainFolder = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel';
 Path_Data       = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\CDI Method';
-Path_Output     = fullfile(Path_MainFolder, 'Code', '15  Output - without and wide');
+Path_Output     = fullfile(Path_MainFolder, 'Code', '15  Output - with and fine');
 
 
 %% Load the data
@@ -79,7 +79,7 @@ set(groot, 'defaultLineMarkerFaceColor','auto');
 n_degree = 5;
 param_list = {
     % --- Distorted cases ---
-    struct('b', 6, 'alpha', 1.10, 'beta', 0.90)
+    struct('b', 6, 'alpha', 0.98, 'beta', 0.90)
 
     % --- Undistorted cases ---
     struct('b', 6, 'alpha', 1.00, 'beta', 1.00)
@@ -183,7 +183,8 @@ for g = 1:numel(plot_groups)
     end
     
     xlabel('$R_{t+1}$');
-    ylabel('$E[M_t(R_{t+1})]$');
+    % ylabel('$E[M_t(R_{t+1})]$');
+    ylabel('$\mathrm{E}[M_t(R_{t+1})]$', 'Interpreter', 'latex');
     grid on;
     xlim([0.8 1.2]);
     legend('show', 'Location', 'northeast', 'Box', 'off', 'FontSize', 11);
