@@ -76,8 +76,8 @@ set(groot, 'defaultLineMarkerFaceColor','auto');
 
 %% Parameter & Plot settings
 
-alpha_range = 0.6:0.1:1.2;
-beta_range  = 0.6:0.1:1.2;
+alpha_range = 0.7:0.1:1.2;
+beta_range  = 0.7:0.1:1.2;
 
 % Quintic
 n_degree = 5;
