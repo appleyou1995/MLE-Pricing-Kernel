@@ -189,7 +189,7 @@ for a_idx = 1:numel(alpha_range)
         
         % 檔案命名：
         out_name = sprintf('sdf_sensitivity_alpha_%.2f.png', current_alpha);
-        exportgraphics(fig, fullfile(Path_Output, out_name), 'Resolution', 300);
+        exportgraphics(fig, fullfile(Path_Output_plot, out_name), 'Resolution', 300);
         fprintf('匯出圖表: %s (共包含 %d 條 Beta 曲線)\n', out_name, plot_counter);
     end
     
