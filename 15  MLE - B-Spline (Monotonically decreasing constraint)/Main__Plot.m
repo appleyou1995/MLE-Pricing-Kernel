@@ -252,7 +252,7 @@ for g = 1:numel(plot_groups)
             Basis_Precomputed, Smooth_AllR, Smooth_AllR_RND, ...
             months, use_delta, p.alpha, p.beta);
         
-        legend_str = sprintf('$b=%d, \\,\\alpha=%.2f, \\,\\beta=%.2f$', p.b, p.alpha, p.beta);
+        legend_str = sprintf('$\\alpha=%.2f, \\,\\beta=%.2f$', p.alpha, p.beta);
         plot(date_objs, delta_vec, 'LineWidth', 1.5, ...
             'Color', colors(k,:), ... 
             'DisplayName', legend_str);
@@ -336,7 +336,7 @@ for idx = 1:length(param_list)
         T_save.(T_save.Properties.VariableNames{v}) = round(T_save.(T_save.Properties.VariableNames{v}), 8);
     end
     csv_name = sprintf('RiskTable_b_%d_alpha_%.2f_beta_%.2f.csv', p.b, p.alpha, p.beta);
-    writetable(T_save, fullfile(Path_Output, csv_name));
+    % writetable(T_save, fullfile(Path_Output, csv_name));
 
 
     % ============================================================
@@ -424,11 +424,11 @@ for m = 1:length(measures)
         grid on;
         xlim([0.8 1.2]);
         
-        % 設定 Y 軸範圍 (可依據實際結果微調)
+        % 設定 Y 軸範圍
         switch measure_key
-            case 'ARA', ylim([0, 6]);   case 'RRA', ylim([0, 6]);
-            case 'AP',  ylim([-100, 100]);  case 'RP',  ylim([-100, 100]);
-            case 'AT',  ylim([-100, 100]);  case 'RT',  ylim([-100, 100]);
+            case 'ARA', ylim([0, 5]);   case 'RRA', ylim([0, 5]);
+            case 'AP',  ylim([4, 12]);  case 'RP',  ylim([4, 12]);
+            case 'AT',  ylim([4, 12]);  case 'RT',  ylim([4, 12]);
         end
         
         legend('show', 'Location', 'northeast', 'Box', 'off', 'FontSize', 11);
