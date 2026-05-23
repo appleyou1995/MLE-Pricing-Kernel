@@ -439,3 +439,117 @@ for m = 1:length(measures)
     end
 end
 fprintf('Risk plots & tables done.\n');
+
+
+%% Compute PIT, Plot Histogram, and Save Statistics
+
+clc
+fprintf('\nGenerating PIT Histograms and Statistics...\n');
+stats_list = [];
+stats_cnt = 1;
+
+use_delta = true;
+T_len = length(Realized_Return.realized_ret);
+months = Smooth_AllR.Properties.VariableNames;
+
+for i = 1:length(param_list)
+    p = param_list{i};
+    chosen_file = '';
+    theta_hat = [];
+    
+    for f = 1:numel(files)
+        try
+            S_info = load(fullfile(Path_Output, files(f).name), 'b_val', 'alpha', 'beta', 'theta_hat'); 
+        catch, continue; end
+        
+        if S_info.b_val == p.b && abs(S_info.alpha - p.alpha) < tol && abs(S_info.beta - p.beta) < tol
+            chosen_file = files(f).name;
+            theta_hat = S_info.theta_hat;
+            break;
+        end
+    end
+    
+    if isempty(chosen_file), continue; end
+    
+    Basis_Precomputed = cell(T_len, 1);
+    
+    % Quintic B-spline 設定
+    n_degree = 5;
+    k_order  = n_degree + 1;    
+    num_basis_function = p.b + 1;
+    num_breaks = num_basis_function - k_order + 2;
+    breaks = linspace(Global_Min_R, Global_Max_R, num_breaks);
+    knots  = augknt(breaks, k_order);
+    
+    for t = 1:T_len
+        col_name = months{t};
+        R_axis_t = Smooth_AllR.(col_name);
+        Basis_Precomputed{t} = spcol(knots, k_order, R_axis_t(:));
+    end
+    
+    % 取得 PIT 向量
+    [~, ~, ~, ~, pit_vec] = log_likelihood_bspline(theta_hat, ...
+        Realized_Return.realized_ret, Risk_Free_Rate, ...
+        Basis_Precomputed, Smooth_AllR, Smooth_AllR_RND, ...
+        months, use_delta, p.alpha, p.beta);
+    
+    % --- 統計檢定 ---
+    pd_uniform = makedist('Uniform', 'Lower', 0, 'Upper', 1);
+    [~, p_ks, ks_stat] = kstest(pit_vec, 'CDF', pd_uniform);
+    
+    z_norm = norminv(pit_vec); 
+    z_norm = z_norm(isfinite(z_norm)); 
+    [~, p_jb, jb_stat] = jbtest(z_norm);
+    lags_to_test = [1, 5, 10];
+    [~, p_lb, lb_stat] = lbqtest(z_norm, 'Lags', lags_to_test);
+    
+    stats_list(stats_cnt).b     = p.b;
+    stats_list(stats_cnt).alpha = p.alpha;
+    stats_list(stats_cnt).beta  = p.beta;
+    stats_list(stats_cnt).KS_Stat = ks_stat;
+    stats_list(stats_cnt).KS_Pval = p_ks;
+    stats_list(stats_cnt).JB_Stat = jb_stat;
+    stats_list(stats_cnt).JB_Pval = p_jb;
+    stats_list(stats_cnt).LB_Stat_Lag1  = lb_stat(1);
+    stats_list(stats_cnt).LB_Pval_Lag1  = p_lb(1);
+    stats_list(stats_cnt).LB_Stat_Lag5  = lb_stat(2);
+    stats_list(stats_cnt).LB_Pval_Lag5  = p_lb(2);
+    stats_list(stats_cnt).LB_Stat_Lag10 = lb_stat(3);
+    stats_list(stats_cnt).LB_Pval_Lag10 = p_lb(3);
+    stats_cnt = stats_cnt + 1;
+    
+    % --- 繪製 Histogram ---
+    fig = figure('Position', [50 80 450 400]);
+    set(fig, 'GraphicsSmoothing', 'on');
+    set(fig, 'Renderer', 'painters');
+    layout = tiledlayout(1, 1, 'TileSpacing', 'Compact', 'Padding', 'None');
+    nexttile;
+    hold on;
+    
+    histogram(pit_vec, 20, 'Normalization', 'pdf', 'FaceColor', [0.7 0.7 0.7], 'EdgeColor', 'w');
+    yline(1, 'r--', 'LineWidth', 2, 'DisplayName', 'Uniform(0,1)');
+    hold off;
+    
+    xlabel('$z_t$'); ylabel('Density');
+    xlim([0 1]); ylim([0 1.8]); grid on;
+    set(gca, 'LooseInset', get(gca, 'TightInset'));
+    
+    % 統一使用 exportgraphics 並輸出至 Path_Output
+    out_name = sprintf('plot_PIT_b_%d_alpha_%.2f_beta_%.2f.png', p.b, p.alpha, p.beta);
+    exportgraphics(fig, fullfile(Path_Output, out_name), 'Resolution', 300);
+    close(fig);
+end
+
+if ~isempty(stats_list)
+    T_stats = struct2table(stats_list);
+    vars = T_stats.Properties.VariableNames;
+    for i = 1:numel(vars)
+        if isnumeric(T_stats.(vars{i}))
+            T_stats.(vars{i}) = round(T_stats.(vars{i}), 4);
+        end
+    end
+    csv_filename = fullfile(Path_Output, 'PIT_Test_Statistics_BSpline.csv');
+    writetable(T_stats, csv_filename);
+    fprintf('\nStatistics saved to: %s\n', csv_filename);
+end
+fprintf('All PIT histograms and statistics completed.\n');
