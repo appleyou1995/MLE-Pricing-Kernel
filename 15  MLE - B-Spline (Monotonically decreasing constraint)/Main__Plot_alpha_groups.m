@@ -182,13 +182,13 @@ for a_idx = 1:numel(alpha_range)
     if plot_counter > 0
         xlabel('$R_{t+1}$');
         ylabel('$\mathrm{E}[M_t(R_{t+1})]$', 'Interpreter', 'latex');
-        title(sprintf('SDF Curves with Fixed $\\alpha = %.2f$', current_alpha), 'Interpreter', 'latex');
+        title(sprintf('Fixed $\\alpha = %.2f$', current_alpha), 'Interpreter', 'latex');
         grid on;
         xlim([0.8 1.2]);
         legend('show', 'Location', 'northeast', 'Box', 'off', 'FontSize', 10);
         
         % 檔案命名：
-        out_name = sprintf('sdf_sensitivity_alpha_%.2f.png', current_alpha);
+        out_name = sprintf('sdf_sensitivity_unweighted_alpha_%.2f.png', current_alpha);
         exportgraphics(fig, fullfile(Path_Output_plot, out_name), 'Resolution', 300);
         fprintf('匯出圖表: %s (共包含 %d 條 Beta 曲線)\n', out_name, plot_counter);
     end
@@ -335,13 +335,13 @@ for a_idx = 1:numel(alpha_range)
     if plot_counter > 0
         xlabel('$R_{t+1}$');
         ylabel('$\mathrm{E}[m_t(R_{t+1})]$', 'Interpreter', 'latex');
-        title(sprintf('SDF Curves with Fixed $\\alpha = %.2f$', current_alpha), 'Interpreter', 'latex');
+        title(sprintf('Fixed $\\alpha = %.2f$', current_alpha), 'Interpreter', 'latex');
         grid on;
         xlim([0.8 1.2]);
         legend('show', 'Location', 'northeast', 'Box', 'off', 'FontSize', 10);
         
         % 檔案命名：
-        out_name = sprintf('sdf_sensitivity_alpha_%.2f_m.png', current_alpha);
+        out_name = sprintf('sdf_sensitivity_weighted_alpha_%.2f.png', current_alpha);
         exportgraphics(fig, fullfile(Path_Output_plot, out_name), 'Resolution', 300);
         fprintf('匯出圖表: %s (共包含 %d 條 Beta 曲線)\n', out_name, plot_counter);
     end
