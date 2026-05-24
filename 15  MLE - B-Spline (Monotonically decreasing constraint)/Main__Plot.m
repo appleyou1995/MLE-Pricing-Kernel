@@ -2,7 +2,7 @@ clear; clc;
 
 Path_MainFolder = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel';
 Path_Data       = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\CDI Method';
-Path_Output     = fullfile(Path_MainFolder, 'Code', '15  Output - with and fine');
+Path_Output     = fullfile(Path_MainFolder, 'Code', '15  Output - without and wide');
 
 
 %% Load the data
@@ -79,7 +79,7 @@ set(groot, 'defaultLineMarkerFaceColor','auto');
 n_degree = 5;
 param_list = {
     % --- Distorted cases ---
-    struct('b', 6, 'alpha', 0.98, 'beta', 0.90)
+    struct('b', 6, 'alpha', 1.10, 'beta', 0.90)
 
     % --- Undistorted cases ---
     struct('b', 6, 'alpha', 1.00, 'beta', 1.00)
@@ -446,7 +446,7 @@ fprintf('Risk plots & tables done.\n');
 clc
 
 % 設定區間數量 (bins)
-num_bins = 8;
+num_bins = 20;
 
 fprintf('\nGenerating PIT Histograms and Statistics...\n');
 stats_list = [];
