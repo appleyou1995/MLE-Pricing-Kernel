@@ -554,8 +554,8 @@ if ~isempty(stats_list)
             T_stats.(vars{i}) = round(T_stats.(vars{i}), 4);
         end
     end
-    % csv_filename = fullfile(Path_Output, 'PIT_Test_Statistics_BSpline.csv');
-    % writetable(T_stats, csv_filename);
-    % fprintf('\nStatistics saved to: %s\n', csv_filename);
+    csv_filename = fullfile(Path_Output, 'PIT_Test_Statistics_BSpline.csv');
+    writetable(T_stats, csv_filename);
+    fprintf('\nStatistics saved to: %s\n', csv_filename);
 end
 fprintf('All PIT histograms and statistics completed.\n');
