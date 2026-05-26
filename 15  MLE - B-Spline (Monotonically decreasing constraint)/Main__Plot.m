@@ -2,7 +2,7 @@ clear; clc;
 
 Path_MainFolder = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel';
 Path_Data       = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\CDI Method';
-Path_Output     = fullfile(Path_MainFolder, 'Code', '15  Output - without and wide');
+Path_Output     = fullfile(Path_MainFolder, 'Code', '15  Output - with and fine');
 
 
 %% Load the data
@@ -79,7 +79,7 @@ set(groot, 'defaultLineMarkerFaceColor','auto');
 n_degree = 5;
 param_list = {
     % --- Distorted cases ---
-    struct('b', 6, 'alpha', 1.10, 'beta', 0.90)
+    struct('b', 6, 'alpha', 0.98, 'beta', 0.90)
 
     % --- Undistorted cases ---
     struct('b', 6, 'alpha', 1.00, 'beta', 1.00)
@@ -559,3 +559,86 @@ if ~isempty(stats_list)
     fprintf('\nStatistics saved to: %s\n', csv_filename);
 end
 fprintf('All PIT histograms and statistics completed.\n');
+
+
+%% Plot Risk Preference Indices (Beamer Theme: Absolute vs Relative)
+
+% Define Color (LaTeX Beamer Theme - Metropolis)
+mRed        = '#C1403D';
+mLightBlue  = '#3279a8';
+mDarkBlue   = '#2c3e50';
+mBackground = '#FAFAFA';
+
+% 將指標分為絕對風險與相對風險兩組
+abs_measures = {'ARA', 'AP', 'AT'};
+rel_measures = {'RRA', 'RP', 'RT'};
+
+plot_sets = {
+    struct('measures', {abs_measures}, 'filename', 'Group_Risk_Absolute_Beamer.png')
+    struct('measures', {rel_measures}, 'filename', 'Group_Risk_Relative_Beamer.png')
+};
+
+for s = 1:2
+    current_set = plot_sets{s};
+    
+    % Initialize figure with theme background
+    fig = figure('Position', [100, 100, 1200, 400], 'Color', mBackground);
+    set(fig, 'GraphicsSmoothing', 'on', 'Renderer', 'painters');
+    tiledlayout(1, 3, 'TileSpacing', 'Compact', 'Padding', 'None');
+    
+    for m_idx = 1:3
+        measure_key = current_set.measures{m_idx};
+        nexttile;
+        hold on;
+        
+        for idx = [2, 1] 
+            p = param_list{idx};
+            if isempty(risk_results{idx}), continue; end
+            
+            Y_plot = risk_results{idx}.(measure_key);
+            
+            % 根據參數設定，對應扭曲與非扭曲的顏色
+            if idx == 1 % Distorted
+                line_color = mRed;
+                legend_str = sprintf('Distorted ($\\alpha=%.2f, \\,\\beta=%.2f$)', p.alpha, p.beta);
+            else        % Undistorted
+                line_color = mLightBlue;
+                legend_str = sprintf('Undistorted ($\\alpha=%.2f, \\,\\beta=%.2f$)', p.alpha, p.beta);
+            end
+            
+            plot(R_axis, Y_plot, 'LineWidth', 2, 'Color', line_color, 'DisplayName', legend_str);
+        end
+        
+        % Beamer 主題標籤設定
+        title(measure_key, 'FontSize', 14, 'Color', mDarkBlue, 'Interpreter', 'none');
+        xlabel('$R_{t+1}$', 'Interpreter', 'latex', 'FontSize', 14);
+        
+        xlim([0.8 1.2]);
+        switch measure_key
+            case {'ARA', 'RRA'}, ylim([0, 5]);
+            case {'AP', 'RP'},  ylim([4, 12]);
+            case {'AT', 'RT'},  ylim([4, 12]);
+        end
+        grid on;
+        
+        % 設定 Beamer 座標軸格式
+        set(gca, ...
+            'box', 'on', ...
+            'FontSize', 12, ...
+            'XColor', mDarkBlue, ...
+            'YColor', mDarkBlue, ...
+            'Color', mBackground);
+        
+        % 只在第三張子圖加上圖例，保持畫面乾淨
+        if m_idx == 3
+            legend('show', 'Location', 'northeast', 'Box', 'off', 'FontSize', 11, 'TextColor', mDarkBlue, 'Interpreter', 'latex');
+        end
+        hold off;
+    end
+    
+    % 匯出圖片，包含指定的背景顏色
+    out_name = fullfile(Path_Output, current_set.filename);
+    exportgraphics(fig, out_name, 'BackgroundColor', mBackground, 'Resolution', 300);
+    close(fig);
+end
+fprintf('Risk plots (Beamer layout) done.\n');
