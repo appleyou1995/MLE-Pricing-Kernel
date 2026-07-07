@@ -15,7 +15,7 @@ END_BY = "quote_month"
 END_EXP_MONTH = "2025-08"   # 這行在 END_BY = "quote_month" 時不會用到
 
 OUTPUT_DIR = Path(
-    r"D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel\Code\01  Output"
+    r"D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel\Code\00  Output"
 )
 
 SAVE_AUDIT = True

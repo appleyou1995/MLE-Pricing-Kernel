@@ -11,7 +11,7 @@ data_dir = Path(
 )
 
 output_dir = Path(
-    r"D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel\Code\01  Output"
+    r"D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel\Code\00  Output"
 )
 
 input_file = data_dir / "raw_IndexDivYield_19962025.csv"
