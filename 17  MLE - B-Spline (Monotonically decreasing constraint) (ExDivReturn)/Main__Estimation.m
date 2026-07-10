@@ -2,7 +2,7 @@ clear; clc;
 
 Path_MainFolder = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel';
 Path_Data   = fullfile(Path_MainFolder, 'Code', '00  Output');
-Path_Output = fullfile(Path_MainFolder, 'Code', '17  Output');
+Path_Output = fullfile(Path_MainFolder, 'Code', '17  Output - wide');
 
 
 %% Load the data
@@ -42,14 +42,14 @@ clear data FileName input_filename year
 
 %% Distortion Coefficient
 
-diff = 0.01;
+diff = 0.1;
 
-alpha_min  = 0.88;
-alpha_max  = 1.02;
+alpha_min  = 0.4;
+alpha_max  = 1.3;
 alpha_grid = alpha_min:diff:alpha_max;
 
-beta_min  = 0.88;
-beta_max  = 1.02;
+beta_min  = 0.4;
+beta_max  = 1.3;
 beta_grid = beta_min:diff:beta_max;
 
 
