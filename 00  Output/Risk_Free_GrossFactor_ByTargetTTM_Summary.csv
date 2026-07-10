@@ -1,0 +1,5 @@
+target_ttm,n_target_rows,n_success,n_missing,min_date,max_date,min_rf_days,max_rf_days,n_interpolate,n_extrap_below,n_extrap_above,n_lagged_rf_date
+30,356,356,0,19960117,20250820,29,30,356,0,0,0
+60,356,356,0,19960117,20250820,56,65,356,0,0,0
+90,356,356,0,19960117,20250820,84,93,356,0,0,0
+180,356,356,0,19960117,20250820,175,184,356,0,0,0
