@@ -248,8 +248,259 @@ for g = 1:numel(plot_groups)
     xlim([0.8 1.2]);
     legend('show', 'Location', 'northeast', 'Box', 'off', 'FontSize', 11);
     
-    out_name = sprintf('plot_M_curve_Group_%s.png', group.suffix);
+    out_name = sprintf('plot_M_MarginalUtility_curve_Group_%s.png', group.suffix);
     exportgraphics(fig, fullfile(Path_Output, out_name), 'Resolution', 300);
+    hold off;
+end
+
+
+%% Plot small-m curve: m_t(R) = M_t(R) * D'(F^P(R))
+%
+% Polkovnichenko and Zhao (2013):
+%
+%   m_t(R) = u'(R) Z(P)
+%
+% In our notation:
+%
+%   m_t(R) = M_t(R) D'(F^P(R))
+%
+% This section is appended after the original M-curve plotting code.
+% The original code does not need to be modified.
+
+% -------------------------------------------------------------------------
+% 1. Estimate the physical CDF F^P(R) using realized returns
+% -------------------------------------------------------------------------
+
+R_realized_for_cdf = Realized_Return.realized_ret(:);
+R_realized_for_cdf = R_realized_for_cdf(isfinite(R_realized_for_cdf));
+
+if isempty(R_realized_for_cdf)
+    error('No finite realized returns are available for estimating F^P(R).');
+end
+
+% Smooth kernel estimate of the physical CDF
+F_P_plot = ksdensity( ...
+    R_realized_for_cdf, ...
+    R_axis, ...
+    'Function', 'cdf');
+
+F_P_plot = F_P_plot(:);
+
+% Numerical protection:
+% D'(x) contains log(x) and division by x.
+cdf_epsilon = 1e-8;
+F_P_plot = min(max(F_P_plot, cdf_epsilon), 1 - cdf_epsilon);
+
+
+% -------------------------------------------------------------------------
+% 2. Plot the small-m curve for each parameter group
+% -------------------------------------------------------------------------
+
+for g = 1:numel(plot_groups)
+
+    group = plot_groups{g};
+
+    fig = figure('Position', [50 80 600 500]);
+    set(fig, 'GraphicsSmoothing', 'on');
+    set(fig, 'Renderer', 'painters');
+
+    layout = tiledlayout(1, 1, ...
+        'TileSpacing', 'Compact', ...
+        'Padding', 'None');
+
+    nexttile;
+    hold on;
+
+    for k = 1:numel(group.indices)
+
+        idx = group.indices(k);
+        p = param_list{idx};
+
+        % -----------------------------------------------------------------
+        % 2.1 Load the corresponding theta_hat
+        % -----------------------------------------------------------------
+
+        chosen_file = '';
+        theta_hat = [];
+
+        for f = 1:numel(files)
+
+            try
+                S = load( ...
+                    fullfile(Path_Output, files(f).name), ...
+                    'b_val', 'alpha', 'beta', 'theta_hat');
+            catch
+                continue;
+            end
+
+            parameter_match = ...
+                S.b_val == p.b && ...
+                abs(S.alpha - p.alpha) <= tol && ...
+                abs(S.beta  - p.beta)  <= tol;
+
+            if parameter_match
+                chosen_file = files(f).name;
+                theta_hat = S.theta_hat(:);
+                break;
+            end
+        end
+
+        if isempty(chosen_file)
+            warning(['No estimation result found for ', ...
+                'b = %d, alpha = %.2f, beta = %.2f.'], ...
+                p.b, p.alpha, p.beta);
+            continue;
+        end
+
+
+        % -----------------------------------------------------------------
+        % 2.2 Construct the B-spline basis
+        % -----------------------------------------------------------------
+
+        num_basis_function = p.b + 1;
+        num_breaks = num_basis_function - k_order + 2;
+
+        breaks = linspace( ...
+            Global_Min_R, ...
+            Global_Max_R, ...
+            num_breaks);
+
+        knots = augknt(breaks, k_order);
+
+
+        % -----------------------------------------------------------------
+        % 2.3 Construct the original-grid basis used to obtain delta_t
+        % -----------------------------------------------------------------
+
+        months = Smooth_AllR.Properties.VariableNames;
+        T_len = height(Realized_Return);
+
+        Basis_Original = cell(T_len, 1);
+
+        for t = 1:T_len
+            col_name = months{t};
+            R_axis_t = Smooth_AllR.(col_name);
+
+            Basis_Original{t} = spcol( ...
+                knots, ...
+                k_order, ...
+                R_axis_t(:));
+        end
+
+
+        % -----------------------------------------------------------------
+        % 2.4 Recover the period-specific normalization term delta_t
+        % -----------------------------------------------------------------
+
+        R_vec_numeric  = Realized_Return.realized_ret(:);
+        Rf_vec_numeric = Risk_Free_Rate(:);
+
+        [~, ~, delta_vec] = log_likelihood_bspline( ...
+            theta_hat, ...
+            R_vec_numeric, ...
+            Rf_vec_numeric, ...
+            Basis_Original, ...
+            Smooth_AllR, ...
+            Smooth_AllR_RND, ...
+            months, ...
+            true, ...
+            p.alpha, ...
+            p.beta);
+
+
+        % -----------------------------------------------------------------
+        % 2.5 Evaluate M_t(R) on the common R grid
+        % -----------------------------------------------------------------
+
+        B_plot = spcol(knots, k_order, R_axis);
+
+        Spline_Sum_Plot = B_plot * theta_hat;
+
+        % Same numerical overflow protection as the original code
+        Spline_Sum_Plot = max( ...
+            min(Spline_Sum_Plot, 60), ...
+            -60);
+
+        % Dimensions:
+        % delta_vec              : T x 1
+        % Spline_Sum_Plot'       : 1 x N_R
+        % M_all                  : T x N_R
+        M_all = exp(delta_vec + Spline_Sum_Plot');
+
+
+        % -----------------------------------------------------------------
+        % 2.6 Calculate D'(F^P(R))
+        % -----------------------------------------------------------------
+
+        x = F_P_plot;
+
+        transformed_probability = -p.beta .* log(x);
+
+        D_plot = exp( ...
+            -(transformed_probability .^ p.alpha));
+
+        D_prime_plot = ...
+            (p.alpha .* p.beta ./ x) .* ...
+            (transformed_probability .^ (p.alpha - 1)) .* ...
+            D_plot;
+
+        % Protection against possible numerical problems near the endpoints
+        D_prime_plot(~isfinite(D_prime_plot)) = NaN;
+
+
+        % -----------------------------------------------------------------
+        % 2.7 Construct small m_t(R)
+        %
+        % m_t(R) = M_t(R) D'(F^P(R))
+        % -----------------------------------------------------------------
+
+        m_all = M_all .* D_prime_plot';
+
+        % Time-series average
+        m_curve_avg = mean(m_all, 1, 'omitnan');
+
+
+        % -----------------------------------------------------------------
+        % 2.8 Plot
+        % -----------------------------------------------------------------
+
+        legend_str = sprintf( ...
+            '$\\alpha=%.2f,\\;\\beta=%.2f$', ...
+            p.alpha, ...
+            p.beta);
+
+        plot( ...
+            R_axis, ...
+            m_curve_avg, ...
+            'LineWidth', 2, ...
+            'Color', colors(k, :), ...
+            'DisplayName', legend_str);
+    end
+
+    xlabel('$R_{t+1}$');
+
+    ylabel( ...
+        '$\mathrm{E}[m_t(R_{t+1})]$', ...
+        'Interpreter', 'latex');
+
+    grid on;
+    xlim([0.8 1.2]);
+
+    legend( ...
+        'show', ...
+        'Location', 'northeast', ...
+        'Box', 'off', ...
+        'FontSize', 11);
+
+    out_name = sprintf( ...
+        'plot_m_PricingKernel_curve_Group_%s.png', ...
+        group.suffix);
+
+    exportgraphics( ...
+        fig, ...
+        fullfile(Path_Output, out_name), ...
+        'Resolution', 300);
+
     hold off;
 end
 
