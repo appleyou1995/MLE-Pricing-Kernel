@@ -505,7 +505,7 @@ fprintf('Risk plots & tables done.\n');
 clc
 
 % 設定區間數量 (bins)
-num_bins = 20;
+num_bins = 10;
 
 fprintf('\nGenerating PIT Histograms and Statistics...\n');
 stats_list = [];
