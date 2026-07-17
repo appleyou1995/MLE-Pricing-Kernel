@@ -1,0 +1,422 @@
+clear; clc;
+
+Path_MainFolder = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel';
+
+Path_Data      = fullfile(Path_MainFolder, 'Code', '00  Output');
+Path_RND       = fullfile(Path_MainFolder, 'Code', '01  Output');
+Path_Code_18   = fullfile(Path_MainFolder, 'Code', '18  Simulation - Model Comparison');
+Path_Output_18 = fullfile(Path_MainFolder, 'Code', '18  Output');
+
+addpath(Path_Code_18);
+
+
+%% Simulation settings
+
+Target_TTM = 30;
+b = 6;
+
+Num_Simulations = 20;
+Num_Bins        = 10;
+Batch_Size      = 50;
+Base_Seed       = 20260717;
+
+% Shape comparison:
+% Both constrained and unconstrained models use the SAME distortion
+% parameters. The first version is undistorted, as requested.
+Shape_Alpha = 1.00;
+Shape_Beta  = 1.00;
+
+% This can later be changed without changing any function:
+% Shape_Alpha = 1.00;
+% Shape_Beta  = 0.92;
+
+% Distortion comparison:
+Distortion_Alpha = 1.00;
+Undistorted_Beta = 1.00;
+Distorted_Beta   = 0.92;
+
+% Select which experiments to run.
+% Recommended first run: [true, false, true, false]
+% Full size-and-power analysis: [true, true, true, true]
+Run_Experiments = [true, true, true, true];
+
+
+%% Load realized returns
+
+FileName = ['Realized_Return_TTM_', num2str(Target_TTM), '.csv'];
+Realized_Return = readtable(fullfile(Path_Data, FileName));
+
+
+%% Load risk-free gross factors
+
+FileName = 'Risk_Free_GrossFactor_ByTargetTTM.csv';
+Risk_Free_Rate_All = readtable(fullfile(Path_Data, FileName));
+
+
+%% Load Q-measure PDF tables
+
+Smooth_AllR = [];
+Smooth_AllR_RND = [];
+
+years_to_merge = 1996:2025;
+
+for year = years_to_merge
+    input_filename = fullfile(Path_RND, ...
+        sprintf('TTM_%d_RND_Tables_%d.mat', Target_TTM, year));
+
+    if exist(input_filename, 'file')
+        Loaded = load(input_filename);
+        Smooth_AllR = [Smooth_AllR, ...
+            Loaded.Table_Smooth_AllR]; %#ok<AGROW>
+        Smooth_AllR_RND = [Smooth_AllR_RND, ...
+            Loaded.Table_Smooth_AllR_RND]; %#ok<AGROW>
+    else
+        warning('File %s does not exist.', input_filename);
+    end
+end
+
+clear Loaded FileName input_filename year
+
+
+%% Align RND, realized returns, and risk-free rates
+
+rnd_var_names = string(Smooth_AllR_RND.Properties.VariableNames);
+rnd_dates = str2double(regexp( ...
+    rnd_var_names, '\d+', 'match', 'once'));
+
+realized_dates = double(Realized_Return.date);
+
+rf_date_col = ['date_', num2str(Target_TTM)];
+rf_rate_col = ['rf_gross_TTM', num2str(Target_TTM)];
+
+rf_dates_all  = double(Risk_Free_Rate_All.(rf_date_col));
+rf_values_all = double(Risk_Free_Rate_All.(rf_rate_col));
+
+idx_rf_valid = isfinite(rf_dates_all) & isfinite(rf_values_all);
+rf_dates_all  = rf_dates_all(idx_rf_valid);
+rf_values_all = rf_values_all(idx_rf_valid);
+
+idx_master = ...
+    ismember(realized_dates, rnd_dates) & ...
+    ismember(realized_dates, rf_dates_all);
+
+common_dates = sort(realized_dates(idx_master));
+
+if isempty(common_dates)
+    error('No common dates across the three input datasets.');
+end
+
+[tf_rnd, idx_rnd] = ismember(common_dates, rnd_dates);
+[tf_ret, idx_ret] = ismember(common_dates, realized_dates);
+[tf_rf,  idx_rf]  = ismember(common_dates, rf_dates_all);
+
+if ~all(tf_rnd) || ~all(tf_ret) || ~all(tf_rf)
+    error('Date alignment failed.');
+end
+
+Smooth_AllR     = Smooth_AllR(:, idx_rnd);
+Smooth_AllR_RND = Smooth_AllR_RND(:, idx_rnd);
+Realized_Return = Realized_Return(idx_ret, :);
+Risk_Free_Rate  = rf_values_all(idx_rf);
+
+R_observed = Realized_Return.realized_ret(:);
+Risk_Free_Rate = Risk_Free_Rate(:);
+
+fprintf('\nAligned sample: %d months, %08.0f to %08.0f.\n', ...
+    numel(common_dates), common_dates(1), common_dates(end));
+
+clear idx_master idx_rf_valid idx_rnd idx_ret idx_rf
+clear tf_rnd tf_ret tf_rf rnd_dates realized_dates
+clear rf_dates_all rf_values_all rf_date_col rf_rate_col
+clear Risk_Free_Rate_All rnd_var_names
+
+
+%% Global return range and precomputed B-spline basis
+
+Global_Min_R = Inf;
+Global_Max_R = -Inf;
+months = Smooth_AllR.Properties.VariableNames;
+
+for t = 1:numel(months)
+    R_axis_t = Smooth_AllR.(months{t});
+    Global_Min_R = min(Global_Min_R, min(R_axis_t));
+    Global_Max_R = max(Global_Max_R, max(R_axis_t));
+end
+
+Global_Min_R = Global_Min_R * 0.9;
+Global_Max_R = Global_Max_R * 1.1;
+
+n_degree = 5;
+k_order = n_degree + 1;
+num_basis_function = b + 1;
+num_breaks = num_basis_function - k_order + 2;
+breaks = linspace(Global_Min_R, Global_Max_R, num_breaks);
+knots = augknt(breaks, k_order);
+
+T = numel(R_observed);
+Basis_Precomputed = cell(T, 1);
+
+for t = 1:T
+    R_axis_t = Smooth_AllR.(months{t});
+    Basis_Precomputed{t} = spcol( ...
+        knots, k_order, R_axis_t(:));
+end
+
+
+%% Fit the observed-data models used in the four experiments
+
+fprintf('\nEstimating observed-data models...\n');
+
+% C: constrained, undistorted for the shape comparison
+[theta_C, LL_C, ~, exit_C] = MLE_BSpline_estimation( ...
+    Smooth_AllR, Smooth_AllR_RND, ...
+    Realized_Return, Risk_Free_Rate, ...
+    b, Shape_Alpha, Shape_Beta, ...
+    Global_Min_R, Global_Max_R, ...
+    true, Basis_Precomputed);
+
+% U: unconstrained, with exactly the same alpha and beta as C
+[theta_U, LL_U, ~, exit_U] = MLE_BSpline_estimation( ...
+    Smooth_AllR, Smooth_AllR_RND, ...
+    Realized_Return, Risk_Free_Rate, ...
+    b, Shape_Alpha, Shape_Beta, ...
+    Global_Min_R, Global_Max_R, ...
+    false, Basis_Precomputed);
+
+% N: constrained and undistorted
+if Shape_Alpha == Distortion_Alpha && Shape_Beta == Undistorted_Beta
+    theta_N = theta_C;
+    LL_N = LL_C;
+    exit_N = exit_C;
+else
+    [theta_N, LL_N, ~, exit_N] = MLE_BSpline_estimation( ...
+        Smooth_AllR, Smooth_AllR_RND, ...
+        Realized_Return, Risk_Free_Rate, ...
+        b, Distortion_Alpha, Undistorted_Beta, ...
+        Global_Min_R, Global_Max_R, ...
+        true, Basis_Precomputed);
+end
+
+% D: constrained and distorted, beta fixed at 0.92
+[theta_D, LL_D, ~, exit_D] = MLE_BSpline_estimation( ...
+    Smooth_AllR, Smooth_AllR_RND, ...
+    Realized_Return, Risk_Free_Rate, ...
+    b, Distortion_Alpha, Distorted_Beta, ...
+    Global_Min_R, Global_Max_R, ...
+    true, Basis_Precomputed);
+
+Observed_Fits = struct();
+Observed_Fits.Constraint = struct( ...
+    'theta', theta_C, 'LL', LL_C, 'exitflag', exit_C);
+Observed_Fits.Unconstraint = struct( ...
+    'theta', theta_U, 'LL', LL_U, 'exitflag', exit_U);
+Observed_Fits.Undistorted = struct( ...
+    'theta', theta_N, 'LL', LL_N, 'exitflag', exit_N);
+Observed_Fits.Distorted = struct( ...
+    'theta', theta_D, 'LL', LL_D, 'exitflag', exit_D);
+
+save(fullfile(Path_Output_18, 'Observed_Model_Fits.mat'), ...
+    'Observed_Fits');
+
+
+%% Construct the four sets of month-specific DGP CDFs
+
+[R_Axis_C, F_C] = build_physical_cdf_bspline( ...
+    theta_C, Risk_Free_Rate, Basis_Precomputed, ...
+    Smooth_AllR, Smooth_AllR_RND, months, ...
+    Shape_Alpha, Shape_Beta);
+
+[R_Axis_U, F_U] = build_physical_cdf_bspline( ...
+    theta_U, Risk_Free_Rate, Basis_Precomputed, ...
+    Smooth_AllR, Smooth_AllR_RND, months, ...
+    Shape_Alpha, Shape_Beta);
+
+[R_Axis_N, F_N] = build_physical_cdf_bspline( ...
+    theta_N, Risk_Free_Rate, Basis_Precomputed, ...
+    Smooth_AllR, Smooth_AllR_RND, months, ...
+    Distortion_Alpha, Undistorted_Beta);
+
+[R_Axis_D, F_D] = build_physical_cdf_bspline( ...
+    theta_D, Risk_Free_Rate, Basis_Precomputed, ...
+    Smooth_AllR, Smooth_AllR_RND, months, ...
+    Distortion_Alpha, Distorted_Beta);
+
+
+%% Observed PIT statistics
+
+[~, ~, ~, ~, pit_C] = log_likelihood_bspline( ...
+    theta_C, R_observed, Risk_Free_Rate, ...
+    Basis_Precomputed, Smooth_AllR, Smooth_AllR_RND, ...
+    months, Shape_Alpha, Shape_Beta);
+
+[~, ~, ~, ~, pit_U] = log_likelihood_bspline( ...
+    theta_U, R_observed, Risk_Free_Rate, ...
+    Basis_Precomputed, Smooth_AllR, Smooth_AllR_RND, ...
+    months, Shape_Alpha, Shape_Beta);
+
+[~, ~, ~, ~, pit_N] = log_likelihood_bspline( ...
+    theta_N, R_observed, Risk_Free_Rate, ...
+    Basis_Precomputed, Smooth_AllR, Smooth_AllR_RND, ...
+    months, Distortion_Alpha, Undistorted_Beta);
+
+[~, ~, ~, ~, pit_D] = log_likelihood_bspline( ...
+    theta_D, R_observed, Risk_Free_Rate, ...
+    Basis_Precomputed, Smooth_AllR, Smooth_AllR_RND, ...
+    months, Distortion_Alpha, Distorted_Beta);
+
+Observed_PIT = struct();
+Observed_PIT.Constraint   = compute_pit_statistics(pit_C, Num_Bins);
+Observed_PIT.Unconstraint = compute_pit_statistics(pit_U, Num_Bins);
+Observed_PIT.Undistorted  = compute_pit_statistics(pit_N, Num_Bins);
+Observed_PIT.Distorted    = compute_pit_statistics(pit_D, Num_Bins);
+
+save(fullfile(Path_Output_18, 'Observed_PIT_Statistics.mat'), ...
+    'Observed_PIT');
+
+
+%% Data shared by all simulation experiments
+
+Data = struct();
+Data.Smooth_AllR = Smooth_AllR;
+Data.Smooth_AllR_RND = Smooth_AllR_RND;
+Data.Realized_Return_Template = Realized_Return;
+Data.Risk_Free_Rate = Risk_Free_Rate;
+Data.Basis_Precomputed = Basis_Precomputed;
+Data.months = months;
+Data.b = b;
+Data.Global_Min_R = Global_Min_R;
+Data.Global_Max_R = Global_Max_R;
+
+Model_C = struct( ...
+    'Name', 'Constraint', ...
+    'Alpha', Shape_Alpha, ...
+    'Beta', Shape_Beta, ...
+    'ImposeMonotonicity', true);
+
+Model_U = struct( ...
+    'Name', 'Unconstraint', ...
+    'Alpha', Shape_Alpha, ...
+    'Beta', Shape_Beta, ...
+    'ImposeMonotonicity', false);
+
+Model_N = struct( ...
+    'Name', 'Undistorted', ...
+    'Alpha', Distortion_Alpha, ...
+    'Beta', Undistorted_Beta, ...
+    'ImposeMonotonicity', true);
+
+Model_D = struct( ...
+    'Name', 'Distorted_beta_0_92', ...
+    'Alpha', Distortion_Alpha, ...
+    'Beta', Distorted_Beta, ...
+    'ImposeMonotonicity', true);
+
+
+%% Define the four simulation experiments
+
+Experiments = cell(4, 1);
+
+Experiments{1} = struct( ...
+    'Name', '01 Shape Null - Constraint DGP', ...
+    'Folder', '01_Shape_Null_ConstraintDGP', ...
+    'DGP_R_Axis', {R_Axis_C}, ...
+    'DGP_CDF', {F_C}, ...
+    'ModelA', Model_C, ...
+    'ModelB', Model_U, ...
+    'ObservedTestStatistic', 2 * (LL_U - LL_C));
+
+Experiments{2} = struct( ...
+    'Name', '02 Shape Alternative - Unconstraint DGP', ...
+    'Folder', '02_Shape_Alternative_UnconstraintDGP', ...
+    'DGP_R_Axis', {R_Axis_U}, ...
+    'DGP_CDF', {F_U}, ...
+    'ModelA', Model_C, ...
+    'ModelB', Model_U, ...
+    'ObservedTestStatistic', 2 * (LL_U - LL_C));
+
+Experiments{3} = struct( ...
+    'Name', '03 Distortion Null - Undistorted DGP', ...
+    'Folder', '03_Distortion_Null_UndistortedDGP', ...
+    'DGP_R_Axis', {R_Axis_N}, ...
+    'DGP_CDF', {F_N}, ...
+    'ModelA', Model_N, ...
+    'ModelB', Model_D, ...
+    'ObservedTestStatistic', 2 * (LL_D - LL_N));
+
+Experiments{4} = struct( ...
+    'Name', '04 Distortion Alternative - Distorted DGP', ...
+    'Folder', '04_Distortion_Alternative_DistortedDGP', ...
+    'DGP_R_Axis', {R_Axis_D}, ...
+    'DGP_CDF', {F_D}, ...
+    'ModelA', Model_N, ...
+    'ModelB', Model_D, ...
+    'ObservedTestStatistic', 2 * (LL_D - LL_N));
+
+
+%% Run selected experiments
+
+if isempty(gcp('nocreate'))
+    parpool;
+end
+
+All_Results = cell(4, 1);
+
+for experiment_id = 1:4
+    if ~Run_Experiments(experiment_id)
+        continue
+    end
+
+    Experiment = Experiments{experiment_id};
+    Experiment_Output = fullfile( ...
+        Path_Output_18, Experiment.Folder);
+
+    All_Results{experiment_id} = run_simulation_experiment( ...
+        Experiment, Data, ...
+        Num_Simulations, Num_Bins, ...
+        Base_Seed + experiment_id * 100000, ...
+        Batch_Size, Experiment_Output);
+end
+
+
+%% Size and power summary
+
+Power_Summary = table();
+
+if ~isempty(All_Results{1}) && ~isempty(All_Results{2})
+    shape_null = [All_Results{1}.TestStatistic]';
+    shape_alt  = [All_Results{2}.TestStatistic]';
+
+    critical_shape_95 = prctile(shape_null(isfinite(shape_null)), 95);
+    power_shape_5pct = mean( ...
+        shape_alt(isfinite(shape_alt)) > critical_shape_95);
+
+    Power_Summary = [Power_Summary; table( ...
+        "Monotonicity", critical_shape_95, power_shape_5pct, ...
+        'VariableNames', { ...
+            'Comparison', 'CriticalValue_95', 'EstimatedPower_5pct'})];
+end
+
+if ~isempty(All_Results{3}) && ~isempty(All_Results{4})
+    distortion_null = [All_Results{3}.TestStatistic]';
+    distortion_alt  = [All_Results{4}.TestStatistic]';
+
+    critical_distortion_95 = prctile( ...
+        distortion_null(isfinite(distortion_null)), 95);
+
+    power_distortion_5pct = mean( ...
+        distortion_alt(isfinite(distortion_alt)) > ...
+        critical_distortion_95);
+
+    Power_Summary = [Power_Summary; table( ...
+        "Fixed beta 0.92 versus 1.00", ...
+        critical_distortion_95, power_distortion_5pct, ...
+        'VariableNames', { ...
+            'Comparison', 'CriticalValue_95', 'EstimatedPower_5pct'})];
+end
+
+if ~isempty(Power_Summary)
+    writetable(Power_Summary, ...
+        fullfile(Path_Output_18, 'Power_Summary.csv'));
+end
+
+fprintf('\nAll selected simulation experiments are complete.\n');
