@@ -17,7 +17,7 @@ b = 6;
 
 Num_Simulations = 20;
 Num_Bins        = 10;
-Batch_Size      = 50;
+Batch_Size      = 20;
 Base_Seed       = 20260717;
 
 % Shape comparison:

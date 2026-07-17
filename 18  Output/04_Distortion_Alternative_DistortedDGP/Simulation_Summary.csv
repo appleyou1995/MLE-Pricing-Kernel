@@ -1,0 +1,2 @@
+Experiment,Model_A,Model_B,Observed_TestStatistic,Bootstrap_UpperTail_PValue,Successful_Replications,Mean_TestStatistic,Median_TestStatistic,P90_TestStatistic,P95_TestStatistic,Fraction_LL_B_Greater,Fraction_PIT_B_CloserToUniform
+04 Distortion Alternative - Distorted DGP,Undistorted,Distorted_beta_0_92,0.551010518074463,0.428571428571429,20,0.336668398029587,-0.169104264332759,2.02008440751968,2.61059281196697,0.4,0.2
