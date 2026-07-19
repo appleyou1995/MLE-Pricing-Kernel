@@ -28,21 +28,32 @@ function [R_axis_cell, F_physical_cell] = build_physical_cdf_bspline( ...
             error('Missing RND inputs at t=%d (%s).', t, col_name);
         end
 
-        % Same overflow protection as log_likelihood_bspline.m
+        % Use the same log-domain normalization as
+        % log_likelihood_bspline.m
         spline_sum = B_t * theta;
-        spline_sum = max(min(spline_sum, 60), -60);
 
-        integrand = fQ_t .* exp(-spline_sum);
-        integral_val = trapz(R_axis_t, integrand);
-
-        if ~isfinite(integral_val) || integral_val <= 0
-            error('Invalid normalization integral at t=%d (%s).', ...
+        if any(fQ_t < 0) || any(~isfinite(fQ_t))
+            error('Invalid RND values at t=%d (%s).', ...
                 t, col_name);
         end
 
-        % The risk-free rate cancels after substituting delta_t:
-        %   Rf^{-1} fQ / M = fQ exp(-spline_sum) / integral_val.
-        baseline_pdf = integrand ./ integral_val;
+        log_fQ = log(fQ_t);
+        log_integrand = log_fQ - spline_sum;
+
+        log_integral = log_trapz_exp( ...
+            R_axis_t, log_integrand);
+
+        if ~isfinite(log_integral)
+            error( ...
+                'Invalid normalization integral at t=%d (%s).', ...
+                t, col_name);
+        end
+
+        % The risk-free rate cancels after substituting delta_t.
+        log_baseline_pdf = ...
+            log_integrand - log_integral;
+
+        baseline_pdf = exp(log_baseline_pdf);
 
         tildeF = cumtrapz(R_axis_t, baseline_pdf);
         tildeF = tildeF ./ max(tildeF(end), 1e-12);

@@ -53,87 +53,118 @@ function [LL, BIC, delta_vec, M_vec, pit_vec] = log_likelihood_bspline(theta, R_
         f_star_curve = f_star_curve(:);
         
         % === Step 2: Compute Spline Sum Q(R) ===
-        Spline_Sum = (B_mat * theta);
-        Spline_Sum = max(min(Spline_Sum, 60), -60);
-        
-        % === Step 3: Compute delta_t ===
-        % delta_t = -ln(Rf) + ln( integral( f* x exp(-Spline_Sum) ) )
-        
-        integrand = f_star_curve .* exp(-Spline_Sum);
-        integral_val = max(trapz(R_axis, integrand), 1e-300);
-        
-        delta_t = -log(Rf_t) + log(integral_val);
-        
-        if nargout > 2, delta_vec(t) = delta_t; end
-        
-        % === Step 4: Evaluate M(R_{t+1}) ===
-        % M = exp( delta_t + Spline_Sum )        
-        logM   = delta_t + Spline_Sum;
-        M_grid = exp(logM);  
-        
-        if nargout > 3
-            M_vec(t, :) = M_grid';
-        end
-        
-        % === Step 5: Evaluate f_t(R) ===
-        % f_t = f* / (Rf * M)
-        % 代入 M: f_t = f* / (Rf * exp(delta + Spline_Sum))
-        %             = f* / (Rf * (Integral/Rf) * exp(Spline_Sum))
-        %             = f* / (Integral * exp(Spline_Sum))
-        %             = (f* * exp(-Spline_Sum)) / Integral        
-        baseline_pdf = integrand ./ integral_val; 
-        
-        % Regularization check
-        if ~all(isfinite(baseline_pdf)) || sum(baseline_pdf)==0
+        Spline_Sum = B_mat * theta;
+
+        % === Step 3: Compute delta_t in the log domain ===
+        % log_integrand = log(f*) - Spline_Sum
+        % log_integral  = log integral exp(log_integrand) dR
+        if any(f_star_curve < 0) || any(~isfinite(f_star_curve))
             LL_contributions(t) = log(1e-12);
             continue
         end
-        
+
+        log_f_star = log(f_star_curve);
+        log_integrand = log_f_star - Spline_Sum;
+        log_integral = log_trapz_exp(R_axis, log_integrand);
+
+        if ~isfinite(log_integral)
+            LL_contributions(t) = log(1e-12);
+            continue
+        end
+
+        delta_t = -log(Rf_t) + log_integral;
+
+        if nargout > 2
+            delta_vec(t) = delta_t;
+        end
+
+        % === Step 4: Evaluate M(R) ===
+        logM = delta_t + Spline_Sum;
+
+        if nargout > 3
+            M_grid = exp(logM);
+            M_vec(t, :) = M_grid';
+        end
+
+        % === Step 5: Evaluate baseline physical density ===
+        log_baseline_pdf = log_integrand - log_integral;
+        baseline_pdf = exp(log_baseline_pdf);
+
+        % Keep the existing numerical guard unchanged
+        if ~all(isfinite(baseline_pdf)) || sum(baseline_pdf) == 0
+            LL_contributions(t) = log(1e-12);
+            continue
+        end
+
         tildeF = cumtrapz(R_axis, baseline_pdf);
         tildeF = tildeF ./ max(tildeF(end), 1e-12);
-        tildeF = min(max(tildeF, 1e-12), 1-1e-12);
+        tildeF = min(max(tildeF, 1e-12), 1 - 1e-12);
 
         % Physical Probability Integral Transform
         if nargout > 4
-            u_tilde = interp1(R_axis, tildeF, R_realized_t, 'pchip');            
-            u_tilde = min(max(u_tilde, 1e-12), 1-1e-12);
-            w_val   = -log(u_tilde);
-            pit_val = exp( -(w_val^(1/alpha)) / beta );            
+            u_tilde = interp1( ...
+                R_axis, tildeF, R_realized_t, 'pchip');
+
+            u_tilde = min(max(u_tilde, 1e-12), 1 - 1e-12);
+            w_val = -log(u_tilde);
+
+            pit_val = exp( ...
+                -(w_val^(1 / alpha)) / beta);
+
             pit_vec(t) = pit_val;
         end
-        
-        % === Step 6: Distortion (Alpha / Beta) ===
-        w    = -log(tildeF);                                               
-        Dinv = exp( -(w.^(1/alpha)) / beta );                              
-        Jac  = Dinv .* ( w.^(1/alpha - 1) ) ./ ( alpha*beta .* tildeF );   
-        
-        f_physical_curve = Jac .* baseline_pdf;
-        
-        % Normalize physical curve again just in case
-        Z1 = trapz(R_axis, f_physical_curve);
-        if ~isfinite(Z1) || Z1<=0
+
+        % === Step 6: Distortion in the log domain ===
+        w = -log(tildeF);
+
+        log_Dinv = -(w.^(1 / alpha)) ./ beta;
+
+        log_Jac = log_Dinv + ...
+            (1 / alpha - 1) .* log(w) - ...
+            log(alpha) - log(beta) - log(tildeF);
+
+        log_f_physical_unnormalized = ...
+            log_Jac + log_baseline_pdf;
+
+        log_Z1 = log_trapz_exp( ...
+            R_axis, log_f_physical_unnormalized);
+
+        if ~isfinite(log_Z1)
             LL_contributions(t) = log(1e-12);
             continue
         end
-        f_physical_curve = f_physical_curve ./ Z1;
-        
-        % === Step 7: Interpolate to get Likelihood of Realized Return ===        
-        mask = isfinite(R_axis) & isfinite(f_physical_curve);
+
+        log_f_physical_curve = ...
+            log_f_physical_unnormalized - log_Z1;
+
+        % === Step 7: Interpolate log density at realized return ===
+        mask = isfinite(R_axis) & ...
+            isfinite(log_f_physical_curve);
+
         R_axis_good = R_axis(mask);
-        fP_good     = f_physical_curve(mask);
-        
+        log_fP_good = log_f_physical_curve(mask);
+
         if numel(R_axis_good) < 2
-            val = 1e-12;
+            log_val = log(1e-12);
         else
-            if R_realized_t < R_axis_good(1) || R_realized_t > R_axis_good(end)
-                val = 1e-12;
+            if R_realized_t < R_axis_good(1) || ...
+                    R_realized_t > R_axis_good(end)
+
+                log_val = log(1e-12);
             else
-                val = interp1(R_axis_good, fP_good, R_realized_t, 'pchip');
-                if ~isfinite(val) || val<=0, val = 1e-12; end
+                log_val = interp1( ...
+                    R_axis_good, ...
+                    log_fP_good, ...
+                    R_realized_t, ...
+                    'pchip');
+
+                if ~isfinite(log_val)
+                    log_val = log(1e-12);
+                end
             end
         end
-        
-        LL_contributions(t) = log(val);
+
+        LL_contributions(t) = log_val;
     end
     
     LL  = sum(LL_contributions);
