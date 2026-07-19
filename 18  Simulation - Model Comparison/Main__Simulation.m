@@ -165,6 +165,9 @@ end
 
 fprintf('\nEstimating observed-data models...\n');
 
+Observed_Timer = tic;
+fprintf('[Observed 1/4] Estimating constrained model...\n');
+
 % C: constrained, undistorted for the shape comparison
 [theta_C, LL_C, ~, exit_C] = MLE_BSpline_estimation( ...
     Smooth_AllR, Smooth_AllR_RND, ...
@@ -173,6 +176,11 @@ fprintf('\nEstimating observed-data models...\n');
     Global_Min_R, Global_Max_R, ...
     true, Basis_Precomputed);
 
+fprintf('[Observed 1/4] Constrained model completed. LL = %.6f\n', ...
+    LL_C);
+
+fprintf('[Observed 2/4] Estimating unconstrained model...\n');
+
 % U: unconstrained, with exactly the same alpha and beta as C
 [theta_U, LL_U, ~, exit_U] = MLE_BSpline_estimation( ...
     Smooth_AllR, Smooth_AllR_RND, ...
@@ -180,6 +188,11 @@ fprintf('\nEstimating observed-data models...\n');
     b, Shape_Alpha, Shape_Beta, ...
     Global_Min_R, Global_Max_R, ...
     false, Basis_Precomputed);
+
+fprintf('[Observed 2/4] Unconstrained model completed. LL = %.6f\n', ...
+    LL_U);
+
+fprintf('[Observed 3/4] Preparing undistorted model...\n');
 
 % N: constrained and undistorted
 if Shape_Alpha == Distortion_Alpha && Shape_Beta == Undistorted_Beta
@@ -195,6 +208,12 @@ else
         true, Basis_Precomputed);
 end
 
+fprintf('[Observed 3/4] Undistorted model completed. LL = %.6f\n', ...
+    LL_N);
+
+fprintf(['[Observed 4/4] Estimating distorted model ', ...
+    'and searching beta...\n']);
+
 % D: constrained and distorted.
 % beta is estimated over the same grid that will be used
 % inside every simulation replication.
@@ -208,9 +227,12 @@ end
 
 beta_D_hat = output_D.SelectedBeta;
 
-fprintf( ...
-    'Observed-sample beta MLE on the grid: %.2f\n', ...
-    beta_D_hat);
+fprintf(['[Observed 4/4] Distorted model completed. ', ...
+    'Selected beta = %.2f, LL = %.6f\n'], ...
+    beta_D_hat, LL_D);
+
+fprintf('All observed-data models completed in %.2f minutes.\n', ...
+    toc(Observed_Timer) / 60);
 
 Observed_Fits = struct();
 
@@ -462,7 +484,7 @@ if ~isempty(All_Results{3}) && ~isempty(All_Results{4})
         critical_distortion_95);
 
     Power_Summary = [Power_Summary; table( ...
-        "Fixed beta 0.92 versus 1.00", ...
+        "Estimated beta versus beta 1.00", ...
         critical_distortion_95, power_distortion_5pct, ...
         'VariableNames', { ...
             'Comparison', 'CriticalValue_95', 'EstimatedPower_5pct'})];

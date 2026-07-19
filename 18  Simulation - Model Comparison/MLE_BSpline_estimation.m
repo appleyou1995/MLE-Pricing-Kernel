@@ -27,6 +27,16 @@ function [theta_hat, log_lik, BIC, exitflag, output, delta_vec, M_vec, pit_vec] 
     if numel(beta_candidates) > 1
         num_beta = numel(beta_candidates);
 
+        % Display beta-grid progress only on the MATLAB client.
+        % Do not print all beta searches running inside parfor workers.
+        Show_Beta_Progress = isempty(getCurrentTask());
+        Beta_Grid_Timer = tic;
+
+        if Show_Beta_Progress
+            fprintf('\nStarting beta-grid search: %d candidates.\n', ...
+                num_beta);
+        end
+
         theta_grid = cell(num_beta, 1);
         output_grid = cell(num_beta, 1);
 
@@ -53,6 +63,20 @@ function [theta_hat, log_lik, BIC, exitflag, output, delta_vec, M_vec, pit_vec] 
             ll_grid(beta_idx) = ll_now;
             bic_grid(beta_idx) = bic_now;
             exit_grid(beta_idx) = exit_now;
+
+            if Show_Beta_Progress
+                fprintf(['  Beta %2d/%2d: beta = %.2f, ', ...
+                    'LL = %.6f, exitflag = %d, ', ...
+                    'elapsed = %.2f minutes\n'], ...
+                    beta_idx, num_beta, beta_now, ...
+                    ll_now, exit_now, ...
+                    toc(Beta_Grid_Timer) / 60);
+            end
+        end
+
+        if Show_Beta_Progress
+            fprintf('Beta-grid search completed in %.2f minutes.\n\n', ...
+                toc(Beta_Grid_Timer) / 60);
         end
 
         valid = isfinite(ll_grid) & exit_grid > 0;

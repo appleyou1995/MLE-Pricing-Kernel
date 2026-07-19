@@ -75,6 +75,18 @@ function Results = run_simulation_experiment( ...
     ModelB_ImposeMonotonicity = ...
         Experiment.ModelB.ImposeMonotonicity;
 
+    % Progress messages from parfor workers to the MATLAB client
+    Progress_Queue = parallel.pool.DataQueue;
+
+    simulation_progress( ...
+        'initialize', Completed, ...
+        num_simulations, Experiment.Name);
+
+    afterEach(Progress_Queue, ...
+        @(simulation_id) simulation_progress( ...
+            'update', simulation_id, ...
+            num_simulations, Experiment.Name));
+
     for batch_start = (Completed + 1):batch_size:num_simulations
         batch_end = min(batch_start + batch_size - 1, num_simulations);
         simulation_indices = batch_start:batch_end;
@@ -163,6 +175,7 @@ function Results = run_simulation_experiment( ...
             One.BinProbability_B = Stats_B.BinProbability;
 
             Batch_Results(q) = One;
+            send(Progress_Queue, simulation_id);
         end
 
         Results(simulation_indices) = Batch_Results;
@@ -328,5 +341,53 @@ function R_sim = draw_returns_from_monthly_cdf(R_axis_cell, F_cell)
         u = rand;
         R_sim(t) = interp1( ...
             F_unique, R_unique, u, 'linear', 'extrap');
+    end
+end
+
+
+function simulation_progress(action, value, total, experiment_name)
+
+    persistent Completed_Count
+    persistent Starting_Count
+    persistent Total_Count
+    persistent Progress_Timer
+    persistent Experiment_Name
+
+    switch action
+
+        case 'initialize'
+            Completed_Count = value;
+            Starting_Count = value;
+            Total_Count = total;
+            Progress_Timer = tic;
+            Experiment_Name = char(experiment_name);
+
+            fprintf('\n==================================================\n');
+            fprintf('Starting experiment: %s\n', Experiment_Name);
+            fprintf('Previously completed: %d/%d\n', ...
+                Completed_Count, Total_Count);
+            fprintf('==================================================\n');
+
+        case 'update'
+            Completed_Count = Completed_Count + 1;
+
+            Newly_Completed = ...
+                Completed_Count - Starting_Count;
+
+            Elapsed_Seconds = toc(Progress_Timer);
+            Average_Seconds = ...
+                Elapsed_Seconds / max(Newly_Completed, 1);
+
+            Remaining_Seconds = ...
+                (Total_Count - Completed_Count) * Average_Seconds;
+
+            fprintf([ ...
+                '[%s] Completed %d/%d (%.1f%%) | ', ...
+                'elapsed %.1f min | ETA %.1f min\n'], ...
+                Experiment_Name, ...
+                Completed_Count, Total_Count, ...
+                100 * Completed_Count / Total_Count, ...
+                Elapsed_Seconds / 60, ...
+                Remaining_Seconds / 60);
     end
 end
