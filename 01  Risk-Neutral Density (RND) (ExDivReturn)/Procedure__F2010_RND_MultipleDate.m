@@ -7,8 +7,8 @@ Path_Output   = fullfile(Path_MainFolder, 'Code', '01  Output');
 Path_Data_inc = fullfile(Path_MainFolder, 'Data', 'IndexOptions1996202508_SP500', 'IV-Based');
 
 % Specific Time-to-Maturity 
-Target_AllTTM = 30;
-% Target_AllTTM = 60;
+% Target_AllTTM = 30;
+Target_AllTTM = 60;
 % Target_AllTTM = 90;
 % Target_AllTTM = 180;
 
