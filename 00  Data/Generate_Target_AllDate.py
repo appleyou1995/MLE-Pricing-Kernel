@@ -50,10 +50,31 @@ MAX_QUOTE_DATE_SHIFT_DAYS = 14
 QUOTE_DATE_SHIFT_PENALTY = 2
 MIN_PRELIMINARY_OBS = 14
 MIN_PRELIMINARY_UNIQUE_K = 10
+MIN_90_PRELIMINARY_OBS = 13
+MIN_90_PRELIMINARY_UNIQUE_K = 10
+PREFERRED_90_PRELIMINARY_OBS = 18
+PREFERRED_90_PRELIMINARY_UNIQUE_K = 13
 TTM_BOUNDS = {
-    90: (75, 105),
+    # TTM=90 must never fall below 80 days.  The 101-120 extension is only
+    # used when no sufficiently populated 80-100 day chain is available in
+    # the same quote month.
+    90: (80, 120),
     180: (140, 220),
 }
+
+requested_labels_text = os.environ.get("MLE_TARGET_LABELS", "").strip()
+if requested_labels_text:
+    REQUESTED_TTM_LABELS = {
+        int(value.strip())
+        for value in requested_labels_text.split(",")
+        if value.strip()
+    }
+else:
+    REQUESTED_TTM_LABELS = set(TTM_MONTH_MAP)
+
+unknown_labels = REQUESTED_TTM_LABELS.difference(TTM_MONTH_MAP)
+if unknown_labels:
+    raise ValueError(f"Unsupported TTM labels: {sorted(unknown_labels)}")
 
 
 # ============================================================
@@ -228,8 +249,10 @@ def build_option_chain_metrics():
 
     The preliminary screen mirrors the observable part of the MATLAB filters:
     bid > 3/8, ask > bid, finite IV, and the OTM/ATM strike region.  Requiring
-    at least 14 observations and 10 unique strikes gives a buffer above the
-    MATLAB spline minimum of 10 observations and 6 unique strikes.
+    The usual base screen requires at least 14 observations and 10 unique
+    strikes.  TTM=90 permits a narrowly scoped 13-observation fallback so that
+    1999-04 can remain in April and at or above 80 days; this is still above
+    the MATLAB spline minimum of 10 observations and 6 unique strikes.
     """
     option_files = [
         path
@@ -351,12 +374,75 @@ def select_data_driven_targets(target, ttm_label, chain_metrics):
             candidates["exdate_dt"] - candidates["date_dt"]
         ).dt.days - 1
 
+        if ttm_label == 90:
+            minimum_obs = MIN_90_PRELIMINARY_OBS
+            minimum_unique_k = MIN_90_PRELIMINARY_UNIQUE_K
+        else:
+            minimum_obs = MIN_PRELIMINARY_OBS
+            minimum_unique_k = MIN_PRELIMINARY_UNIQUE_K
+
         candidates = candidates.loc[
             candidates["date_shift_abs"].le(MAX_QUOTE_DATE_SHIFT_DAYS)
             & candidates["final_ttm"].between(lower_ttm, upper_ttm)
-            & candidates["prelim_obs"].ge(MIN_PRELIMINARY_OBS)
-            & candidates["prelim_unique_k"].ge(MIN_PRELIMINARY_UNIQUE_K)
+            & candidates["prelim_obs"].ge(minimum_obs)
+            & candidates["prelim_unique_k"].ge(minimum_unique_k)
         ].copy()
+
+        quality_rule = "base_minimum"
+
+        if ttm_label == 90:
+            # Keep each monthly observation inside its designated quote month.
+            # Rank maturity/quality tiers before applying the date-shift score:
+            #   1. 80-100 days with the preferred data buffer
+            #   2. 101-120 days with the preferred data buffer
+            #   3. 80-100 days with the base minimum
+            #   4. 101-120 days with the base minimum
+            # This prevents a well-populated 76-day chain from replacing an
+            # admissible >=80-day chain, while allowing a robust longer chain
+            # to beat a barely usable shorter chain (for example 1997-02).
+            quote_period = pd.Period(row["quote_month"], freq="M")
+            candidates = candidates.loc[
+                candidates["date_dt"].dt.to_period("M").eq(quote_period)
+            ].copy()
+
+            preferred_mask = (
+                candidates["prelim_obs"].ge(
+                    PREFERRED_90_PRELIMINARY_OBS
+                )
+                & candidates["prelim_unique_k"].ge(
+                    PREFERRED_90_PRELIMINARY_UNIQUE_K
+                )
+            )
+            core_mask = candidates["final_ttm"].between(80, 100)
+            extended_mask = candidates["final_ttm"].between(101, 120)
+
+            tier_definitions = [
+                (
+                    "preferred_80_100",
+                    preferred_mask & core_mask,
+                ),
+                (
+                    "preferred_101_120",
+                    preferred_mask & extended_mask,
+                ),
+                (
+                    "base_80_100",
+                    core_mask,
+                ),
+                (
+                    "base_101_120",
+                    extended_mask,
+                ),
+            ]
+
+            tier_candidates = pd.DataFrame()
+            for tier_name, tier_mask in tier_definitions:
+                tier_candidates = candidates.loc[tier_mask].copy()
+                if not tier_candidates.empty:
+                    quality_rule = tier_name
+                    break
+
+            candidates = tier_candidates
 
         if candidates.empty:
             raise RuntimeError(
@@ -443,6 +529,7 @@ def select_data_driven_targets(target, ttm_label, chain_metrics):
                 "ttm_error_days": int(choice["ttm_error_days"]),
                 "selection_score": int(choice["selection_score"]),
                 "selection_mode": selection_mode,
+                "quality_rule": quality_rule,
                 "raw_chain_obs": int(choice["raw_obs"]),
                 "preliminary_obs": int(choice["prelim_obs"]),
                 "preliminary_unique_k": int(choice["prelim_unique_k"]),
@@ -511,12 +598,28 @@ def validate_target_table(target, ttm_label):
             validation_errors.append("quote-date shift outside configured window")
         if not target["contract_available"].eq(1).all():
             validation_errors.append("unavailable option contract")
-        if not target["preliminary_obs"].ge(MIN_PRELIMINARY_OBS).all():
+        if ttm_label == 90:
+            minimum_obs = MIN_90_PRELIMINARY_OBS
+            minimum_unique_k = MIN_90_PRELIMINARY_UNIQUE_K
+        else:
+            minimum_obs = MIN_PRELIMINARY_OBS
+            minimum_unique_k = MIN_PRELIMINARY_UNIQUE_K
+
+        if not target["preliminary_obs"].ge(minimum_obs).all():
             validation_errors.append("insufficient preliminary observations")
         if not target["preliminary_unique_k"].ge(
-            MIN_PRELIMINARY_UNIQUE_K
+            minimum_unique_k
         ).all():
             validation_errors.append("insufficient preliminary unique strikes")
+
+        if ttm_label == 90:
+            quote_month_dt = pd.PeriodIndex(
+                target["quote_month"].astype(str),
+                freq="M",
+            )
+            selected_quote_month = date_dt.dt.to_period("M")
+            if not selected_quote_month.eq(quote_month_dt).all():
+                validation_errors.append("quote date crossed quote-month boundary")
 
         if validation_errors:
             raise RuntimeError(
@@ -530,6 +633,16 @@ def validate_target_table(target, ttm_label):
             f"maximum quote-date shift = {target['date_shift_days'].abs().max()} days."
         )
 
+        if ttm_label == 90:
+            tier_counts = target["quality_rule"].value_counts().to_dict()
+            print(
+                "[OK] TTM_90 tier counts: "
+                + ", ".join(
+                    f"{name}={count}"
+                    for name, count in sorted(tier_counts.items())
+                )
+            )
+
 
 # ============================================================
 # 5. Output
@@ -541,6 +654,9 @@ chain_metrics = build_option_chain_metrics()
 targets_by_label = {}
 
 for ttm_label, months_ahead in TTM_MONTH_MAP.items():
+    if ttm_label not in REQUESTED_TTM_LABELS:
+        continue
+
     target = make_target_table(ttm_label, months_ahead)
 
     if ttm_label in DATA_DRIVEN_TTM_LABELS:
@@ -577,9 +693,14 @@ for ttm_label, target in targets_by_label.items():
 
         all_audit.append(target)
 
-if SAVE_AUDIT and len(all_audit) > 0:
+if SAVE_AUDIT and REQUESTED_TTM_LABELS == set(TTM_MONTH_MAP) and len(all_audit) > 0:
     all_audit = pd.concat(all_audit, ignore_index=True)
     all_audit_path = OUTPUT_DIR / "TTM_All_audit.csv"
     all_audit.to_csv(all_audit_path, index=False)
 
     print(f"Saved combined audit: {all_audit_path}")
+elif SAVE_AUDIT and len(all_audit) > 0:
+    print(
+        "Skipped TTM_All_audit.csv because only a subset of TTM labels "
+        f"was requested: {sorted(REQUESTED_TTM_LABELS)}"
+    )
