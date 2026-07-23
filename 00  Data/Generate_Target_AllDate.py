@@ -54,6 +54,16 @@ MIN_90_PRELIMINARY_OBS = 13
 MIN_90_PRELIMINARY_UNIQUE_K = 10
 PREFERRED_90_PRELIMINARY_OBS = 18
 PREFERRED_90_PRELIMINARY_UNIQUE_K = 13
+# A narrowly scoped override for a month whose shorter chain passed the
+# preliminary buffer but produced an abruptly truncated RND after the full
+# MATLAB filters.  First require a genuinely well-populated chain, then choose
+# the maturity closest to 90 days.  No other quote month uses this rule.
+SPECIAL_90_QUALITY_FIRST = {
+    "199711": {
+        "min_preliminary_obs": 30,
+        "min_preliminary_unique_k": 20,
+    },
+}
 TTM_BOUNDS = {
     # TTM=90 must never fall below 80 days.  The 101-120 extension is only
     # used when no sufficiently populated 80-100 day chain is available in
@@ -389,6 +399,8 @@ def select_data_driven_targets(target, ttm_label, chain_metrics):
         ].copy()
 
         quality_rule = "base_minimum"
+        selection_priority = "tier_then_shift_penalized_ttm"
+        quality_then_ttm = False
 
         if ttm_label == 90:
             # Keep each monthly observation inside its designated quote month.
@@ -405,44 +417,65 @@ def select_data_driven_targets(target, ttm_label, chain_metrics):
                 candidates["date_dt"].dt.to_period("M").eq(quote_period)
             ].copy()
 
-            preferred_mask = (
-                candidates["prelim_obs"].ge(
-                    PREFERRED_90_PRELIMINARY_OBS
-                )
-                & candidates["prelim_unique_k"].ge(
-                    PREFERRED_90_PRELIMINARY_UNIQUE_K
-                )
+            quote_month_key = str(row["quote_month"])
+            special_quality_rule = SPECIAL_90_QUALITY_FIRST.get(
+                quote_month_key
             )
-            core_mask = candidates["final_ttm"].between(80, 100)
-            extended_mask = candidates["final_ttm"].between(101, 120)
 
-            tier_definitions = [
-                (
-                    "preferred_80_100",
-                    preferred_mask & core_mask,
-                ),
-                (
-                    "preferred_101_120",
-                    preferred_mask & extended_mask,
-                ),
-                (
-                    "base_80_100",
-                    core_mask,
-                ),
-                (
-                    "base_101_120",
-                    extended_mask,
-                ),
-            ]
+            if special_quality_rule is not None:
+                candidates = candidates.loc[
+                    candidates["prelim_obs"].ge(
+                        special_quality_rule["min_preliminary_obs"]
+                    )
+                    & candidates["prelim_unique_k"].ge(
+                        special_quality_rule[
+                            "min_preliminary_unique_k"
+                        ]
+                    )
+                ].copy()
+                quality_rule = "special_quality_first_199711"
+                selection_priority = "quality_threshold_then_ttm_error"
+                quality_then_ttm = True
 
-            tier_candidates = pd.DataFrame()
-            for tier_name, tier_mask in tier_definitions:
-                tier_candidates = candidates.loc[tier_mask].copy()
-                if not tier_candidates.empty:
-                    quality_rule = tier_name
-                    break
+            else:
+                preferred_mask = (
+                    candidates["prelim_obs"].ge(
+                        PREFERRED_90_PRELIMINARY_OBS
+                    )
+                    & candidates["prelim_unique_k"].ge(
+                        PREFERRED_90_PRELIMINARY_UNIQUE_K
+                    )
+                )
+                core_mask = candidates["final_ttm"].between(80, 100)
+                extended_mask = candidates["final_ttm"].between(101, 120)
 
-            candidates = tier_candidates
+                tier_definitions = [
+                    (
+                        "preferred_80_100",
+                        preferred_mask & core_mask,
+                    ),
+                    (
+                        "preferred_101_120",
+                        preferred_mask & extended_mask,
+                    ),
+                    (
+                        "base_80_100",
+                        core_mask,
+                    ),
+                    (
+                        "base_101_120",
+                        extended_mask,
+                    ),
+                ]
+
+                tier_candidates = pd.DataFrame()
+                for tier_name, tier_mask in tier_definitions:
+                    tier_candidates = candidates.loc[tier_mask].copy()
+                    if not tier_candidates.empty:
+                        quality_rule = tier_name
+                        break
+
+                candidates = tier_candidates
 
         if candidates.empty:
             raise RuntimeError(
@@ -463,19 +496,33 @@ def select_data_driven_targets(target, ttm_label, chain_metrics):
             + QUOTE_DATE_SHIFT_PENALTY * candidates["date_shift_abs"]
         )
 
-        candidates = candidates.sort_values(
-            [
-                "selection_score",
-                "date_shift_abs",
-                "ttm_error_days",
-                "same_original_pair",
-                "prelim_unique_k",
-                "prelim_obs",
-                "date_dt",
-                "exdate_dt",
-            ],
-            ascending=[True, True, True, False, False, False, True, True],
-        )
+        if quality_then_ttm:
+            candidates = candidates.sort_values(
+                [
+                    "ttm_error_days",
+                    "prelim_unique_k",
+                    "prelim_obs",
+                    "date_shift_abs",
+                    "same_original_pair",
+                    "date_dt",
+                    "exdate_dt",
+                ],
+                ascending=[True, False, False, True, False, True, True],
+            )
+        else:
+            candidates = candidates.sort_values(
+                [
+                    "selection_score",
+                    "date_shift_abs",
+                    "ttm_error_days",
+                    "same_original_pair",
+                    "prelim_unique_k",
+                    "prelim_obs",
+                    "date_dt",
+                    "exdate_dt",
+                ],
+                ascending=[True, True, True, False, False, False, True, True],
+            )
         choice = candidates.iloc[0]
 
         chosen_date = choice["date_dt"]
@@ -529,6 +576,7 @@ def select_data_driven_targets(target, ttm_label, chain_metrics):
                 "ttm_error_days": int(choice["ttm_error_days"]),
                 "selection_score": int(choice["selection_score"]),
                 "selection_mode": selection_mode,
+                "selection_priority": selection_priority,
                 "quality_rule": quality_rule,
                 "raw_chain_obs": int(choice["raw_obs"]),
                 "preliminary_obs": int(choice["prelim_obs"]),
