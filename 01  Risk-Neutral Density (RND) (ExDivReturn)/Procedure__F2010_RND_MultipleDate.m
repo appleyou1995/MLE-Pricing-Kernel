@@ -6,10 +6,10 @@ Path_Data     = fullfile(Path_MainFolder, 'Code', '00  Output');
 Path_Output   = fullfile(Path_MainFolder, 'Code', '01  Output');
 Path_Data_inc = fullfile(Path_MainFolder, 'Data', 'IndexOptions1996202508_SP500', 'IV-Based');
 
-% Specific Time-to-Maturity 
+% Specific Time-to-Maturity
 % Target_AllTTM = 30;
-Target_AllTTM = 60;
-% Target_AllTTM = 90;
+% Target_AllTTM = 60;
+Target_AllTTM = 90;
 % Target_AllTTM = 180;
 
 Num_Grid = 30000;
@@ -58,22 +58,22 @@ clear Target_Date_dt Target_ExDate_dt
 %%  Test Mode: Select limited target dates
 
 % Options:
-% "single_year_1996" : 只跑 1996 年
+% "single_year_1997" : 只跑 1997 年
 % "special_dates"    : 只跑 Good Friday / Juneteenth / 近期測試日期
 % "all_dates"        : 跑完整樣本
 
 % RUN_MODE = "special_dates";
-% RUN_MODE = "single_year_1996";
+% RUN_MODE = "single_year_1997";
 RUN_MODE = "all_dates";
 
 switch RUN_MODE
 
-    case "single_year_1996"
+    case "single_year_1997"
 
-        Target_AllDate = Target_AllDate(Target_AllDate.date >= 19960101 & ...
-                                        Target_AllDate.date <= 19961231, :);
+        Target_AllDate = Target_AllDate(Target_AllDate.date >= 19970101 & ...
+                                        Target_AllDate.date <= 19971231, :);
 
-        disp('RUN_MODE = single_year_1996');
+        disp('RUN_MODE = single_year_1997');
 
         Target_AllDate_Display = table( ...
             string(compose('%08.0f', Target_AllDate.date)), ...
