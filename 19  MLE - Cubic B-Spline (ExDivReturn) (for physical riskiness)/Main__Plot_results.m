@@ -40,7 +40,7 @@ for i = 1:numel(TTM_List)
     theta_hat = theta_hat(:);
 
     knot_file = fullfile(Path_Output, sprintf( ...
-        'CubicBSpline_NoDistortion_TTM%03d_Knots.csv', TTM));
+        'CubicBSpline_TTM%03d_Knots.csv', TTM));
     if ~isfile(knot_file)
         error('Knot file not found: %s', knot_file);
     end
