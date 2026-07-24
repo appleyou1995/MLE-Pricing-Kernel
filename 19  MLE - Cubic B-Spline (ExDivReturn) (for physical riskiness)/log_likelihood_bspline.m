@@ -1,143 +1,85 @@
-%% Log-Likelihood Function
+function [LL, BIC, kappa_vec, SDF_Cell, pit_vec, ...
+    LL_contributions, Physical_PDF_Cell] = log_likelihood_bspline( ...
+    theta, R_vec, Rf_vec, Basis_Precomputed, R_Grid_Cell, ...
+    RND_PDF_Cell, Basis_At_Realized, RND_At_Realized)
+%LOG_LIKELIHOOD_BSPLINE No-distortion physical-density likelihood.
+%
+% q(R)       = B(R) * theta
+% kappa_t    = -log(Rf_t) + log integral[f*_t(R) exp(-q(R)) dR]
+% M_t(R)     = exp(kappa_t + q(R))
+% f_t(R)     = f*_t(R) / (Rf_t M_t(R))
+%            = f*_t(R) exp(-q(R)) / integral[f*_t exp(-q) dR]
 
-function [LL, BIC, delta_vec, M_vec, pit_vec] = log_likelihood_bspline(theta, R_vec, Rf_vec, ...
-    Basis_Precomputed, Smooth_AllR, Smooth_AllR_RND, months, alpha, beta)
-
-    T = length(R_vec);
-    LL_contributions = zeros(T, 1);
-    
     theta = theta(:);
-    
-    % Keep delta_vec
-    if nargout > 2
-        delta_vec = zeros(T, 1);
+    T = numel(R_vec);
+    LL_contributions = repmat(log(1e-12), T, 1);
+
+    need_kappa = nargout >= 3;
+    need_sdf = nargout >= 4;
+    need_pit = nargout >= 5;
+    need_physical_pdf = nargout >= 7;
+
+    if need_kappa, kappa_vec = NaN(T, 1); else, kappa_vec = []; end
+    if need_sdf, SDF_Cell = cell(T, 1); else, SDF_Cell = {}; end
+    if need_pit, pit_vec = NaN(T, 1); else, pit_vec = []; end
+    if need_physical_pdf
+        Physical_PDF_Cell = cell(T, 1);
     else
-        delta_vec = [];
-    end
-    
-    % Keep M_vec
-    if nargout > 3
-        col_name_1 = months{1};
-        temp_grid  = Smooth_AllR.(col_name_1);
-        N_grid     = length(temp_grid);
-        M_vec      = zeros(T, N_grid);
-    else
-        M_vec = [];
+        Physical_PDF_Cell = {};
     end
 
-    % Keep pit_vec
-    if nargout > 4
-        pit_vec = zeros(T, 1);
-    else
-        pit_vec = [];
-    end
-
-    % Loop over time
     for t = 1:T
-        % === Step 1: Basic inputs ===
-        R_realized_t = R_vec(t);
-        Rf_t         = Rf_vec(t);
-        col_name     = months{t};
-        
-        R_axis = Smooth_AllR.(col_name);
-        f_star_curve = Smooth_AllR_RND.(col_name);
-        
+        R_axis = R_Grid_Cell{t};
+        rnd_pdf = RND_PDF_Cell{t};
         B_mat = Basis_Precomputed{t};
-        
-        if isempty(R_axis) || isempty(f_star_curve) || isempty(B_mat)
-             LL_contributions(t) = log(1e-12);
-             continue; 
-        end
 
-        R_axis = R_axis(:);
-        f_star_curve = f_star_curve(:);
-        
-        % === Step 2: Compute Spline Sum Q(R) ===
-        Spline_Sum = (B_mat * theta);
-        Spline_Sum = max(min(Spline_Sum, 60), -60);
-        
-        % === Step 3: Compute delta_t ===
-        % delta_t = -ln(Rf) + ln( integral( f* x exp(-Spline_Sum) ) )
-        
-        integrand = f_star_curve .* exp(-Spline_Sum);
-        integral_val = max(trapz(R_axis, integrand), 1e-300);
-        
-        delta_t = -log(Rf_t) + log(integral_val);
-        
-        if nargout > 2, delta_vec(t) = delta_t; end
-        
-        % === Step 4: Evaluate M(R_{t+1}) ===
-        % M = exp( delta_t + Spline_Sum )        
-        logM   = delta_t + Spline_Sum;
-        M_grid = exp(logM);  
-        
-        if nargout > 3
-            M_vec(t, :) = M_grid';
-        end
-        
-        % === Step 5: Evaluate f_t(R) ===
-        % f_t = f* / (Rf * M)
-        % 代入 M: f_t = f* / (Rf * exp(delta + Spline_Sum))
-        %             = f* / (Rf * (Integral/Rf) * exp(Spline_Sum))
-        %             = f* / (Integral * exp(Spline_Sum))
-        %             = (f* * exp(-Spline_Sum)) / Integral        
-        baseline_pdf = integrand ./ integral_val; 
-        
-        % Regularization check
-        if ~all(isfinite(baseline_pdf)) || sum(baseline_pdf)==0
-            LL_contributions(t) = log(1e-12);
+        spline_sum = B_mat * theta;
+        spline_sum = max(min(spline_sum, 60), -60);
+        unnormalized_physical = rnd_pdf .* exp(-spline_sum);
+        integral_value = trapz(R_axis, unnormalized_physical);
+
+        if ~isfinite(integral_value) || integral_value <= 0
             continue
         end
-        
-        tildeF = cumtrapz(R_axis, baseline_pdf);
-        tildeF = tildeF ./ max(tildeF(end), 1e-12);
-        tildeF = min(max(tildeF, 1e-12), 1-1e-12);
 
-        % Physical Probability Integral Transform
-        if nargout > 4
-            u_tilde = interp1(R_axis, tildeF, R_realized_t, 'pchip');            
-            u_tilde = min(max(u_tilde, 1e-12), 1-1e-12);
-            w_val   = -log(u_tilde);
-            pit_val = exp( -(w_val^(1/alpha)) / beta );            
-            pit_vec(t) = pit_val;
+        kappa_t = -log(Rf_vec(t)) + log(integral_value);
+        physical_pdf = unnormalized_physical ./ integral_value;
+
+        if need_kappa
+            kappa_vec(t) = kappa_t;
         end
-        
-        % === Step 6: Distortion (Alpha / Beta) ===
-        w    = -log(tildeF);                                               
-        Dinv = exp( -(w.^(1/alpha)) / beta );                              
-        Jac  = Dinv .* ( w.^(1/alpha - 1) ) ./ ( alpha*beta .* tildeF );   
-        
-        f_physical_curve = Jac .* baseline_pdf;
-        
-        % Normalize physical curve again just in case
-        Z1 = trapz(R_axis, f_physical_curve);
-        if ~isfinite(Z1) || Z1<=0
-            LL_contributions(t) = log(1e-12);
-            continue
+        if need_sdf
+            SDF_Cell{t} = exp(kappa_t + spline_sum);
         end
-        f_physical_curve = f_physical_curve ./ Z1;
-        
-        % === Step 7: Interpolate to get Likelihood of Realized Return ===        
-        mask = isfinite(R_axis) & isfinite(f_physical_curve);
-        R_axis_good = R_axis(mask);
-        fP_good     = f_physical_curve(mask);
-        
-        if numel(R_axis_good) < 2
-            val = 1e-12;
-        else
-            if R_realized_t < R_axis_good(1) || R_realized_t > R_axis_good(end)
-                val = 1e-12;
-            else
-                val = interp1(R_axis_good, fP_good, R_realized_t, 'pchip');
-                if ~isfinite(val) || val<=0, val = 1e-12; end
+        if need_physical_pdf
+            Physical_PDF_Cell{t} = physical_pdf;
+        end
+
+        if ~isempty(Basis_At_Realized{t}) && ...
+                isfinite(RND_At_Realized(t)) && RND_At_Realized(t) > 0
+            spline_at_realized = Basis_At_Realized{t} * theta;
+            spline_at_realized = max(min(spline_at_realized, 60), -60);
+            density_at_realized = RND_At_Realized(t) * ...
+                exp(-spline_at_realized) / integral_value;
+            if isfinite(density_at_realized) && density_at_realized > 0
+                LL_contributions(t) = log(max(density_at_realized, 1e-12));
             end
         end
-        
-        LL_contributions(t) = log(val);
+
+        if need_pit
+            physical_cdf = cumtrapz(R_axis, physical_pdf);
+            if physical_cdf(end) > 0
+                physical_cdf = physical_cdf ./ physical_cdf(end);
+                pit_value = interp1(R_axis, physical_cdf, R_vec(t), ...
+                    'pchip', NaN);
+                if isfinite(pit_value)
+                    pit_vec(t) = min(max(pit_value, 1e-12), 1 - 1e-12);
+                end
+            end
+        end
     end
-    
-    LL  = sum(LL_contributions);
-    k   = length(theta);
-    n   = T;
-    BIC = k * log(n) - 2 * LL;
+
+    LL = sum(LL_contributions);
+    num_free_parameters = numel(theta);
+    BIC = num_free_parameters * log(T) - 2 * LL;
 end

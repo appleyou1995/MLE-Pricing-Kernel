@@ -1,122 +1,113 @@
-%% Main Function: MLE Theta Estimation for B-Spline Pricing Kernel
+function [theta_hat, log_lik, BIC, exitflag, output, kappa_vec, ...
+    SDF_Cell, pit_vec, LL_contributions, Model_Info] = ...
+    MLE_BSpline_estimation(Smooth_AllR, Smooth_AllR_RND, ...
+    Realized_Return, Risk_Free_Rate, Num_Basis_Function, ...
+    Spline_Degree, Enforce_Decreasing, Global_Min_R, Global_Max_R)
+%MLE_BSPLINE_ESTIMATION Estimate a cubic B-spline SDF without distortion.
+%
+% log M_t(R) = kappa_t + B(R) * theta
 
-function [theta_hat, log_lik, BIC, exitflag, output, delta_vec, M_vec, pit_vec] = MLE_BSpline_estimation( ...
-    Smooth_AllR, Smooth_AllR_RND, Realized_Return, Risk_Free_Rate, ...
-    b, alpha, beta, Global_Min_R, Global_Max_R)
-
-    % Settings
     rng(0);
-    R_vec  = Realized_Return.realized_ret;
-    Rf_vec = Risk_Free_Rate;
+    R_vec = double(Realized_Return.realized_ret(:));
+    Rf_vec = double(Risk_Free_Rate(:));
     months = Smooth_AllR.Properties.VariableNames;
-    T      = length(R_vec);
+    rnd_months = Smooth_AllR_RND.Properties.VariableNames;
+    T = numel(R_vec);
 
-    % --- [Step 1] Construct Knots & Precompute Basis ---
-    % n_degree = 3 : cubic
-    %          = 4 : quartic
-    %          = 5 : quintic
-    %          = 6 : sextic
-    n_degree = 5;
-    k_order  = n_degree + 1;    
-    min_knot = Global_Min_R;
-    max_knot = Global_Max_R;
-
-    num_basis_function = b + 1;
-    num_breaks = num_basis_function - k_order + 2;
-    
-    if num_breaks < 2
-        error('基底函數個數 b=%d 不足於支撐 degree n=%d 的 B-spline 模型。需增加 b 的值。', b, n_degree);
+    if numel(Rf_vec) ~= T || numel(months) ~= T || numel(rnd_months) ~= T
+        error('Input lengths are inconsistent in MLE_BSpline_estimation.');
+    end
+    if Spline_Degree ~= 3
+        error('This program is intentionally restricted to cubic splines (degree 3).');
     end
 
-    breaks = linspace(min_knot, max_knot, num_breaks);
-    knots  = augknt(breaks, k_order);
-    
-    % Precompute B-Spline Basis for each day to speed up fmincon
+    Spline_Order = Spline_Degree + 1;
+    Num_Breaks = Num_Basis_Function - Spline_Order + 2;
+    if Num_Breaks < 2
+        error(['Num_Basis_Function = %d is too small for spline degree %d. ' ...
+            'At least %d basis functions are required.'], ...
+            Num_Basis_Function, Spline_Degree, Spline_Order);
+    end
+
+    Breaks = linspace(Global_Min_R, Global_Max_R, Num_Breaks);
+    Knots = augknt(Breaks, Spline_Order);
+
     Basis_Precomputed = cell(T, 1);
-    
+    R_Grid_Cell = cell(T, 1);
+    RND_PDF_Cell = cell(T, 1);
+    Basis_At_Realized = cell(T, 1);
+    RND_At_Realized = NaN(T, 1);
+
     for t = 1:T
-        try
-            col_name = months{t};
-            R_axis = Smooth_AllR.(col_name);
-            R_axis = R_axis(:);
-            
-            B = spcol(knots, k_order, R_axis);            
-            Basis_Precomputed{t} = B;
-            
-        catch ME
-            warning('Error in precompute at t=%d (%s): %s', t, months{t}, ME.message);
-            Basis_Precomputed{t} = [];
+        R_axis = double(Smooth_AllR.(months{t})(:));
+        rnd_pdf = double(Smooth_AllR_RND.(rnd_months{t})(:));
+
+        R_Grid_Cell{t} = R_axis;
+        RND_PDF_Cell{t} = rnd_pdf;
+        Basis_Precomputed{t} = spcol(Knots, Spline_Order, R_axis);
+
+        if R_vec(t) >= R_axis(1) && R_vec(t) <= R_axis(end)
+            Basis_At_Realized{t} = spcol(Knots, Spline_Order, R_vec(t));
+            RND_At_Realized(t) = interp1( ...
+                R_axis, rnd_pdf, R_vec(t), 'pchip');
+        else
+            Basis_At_Realized{t} = [];
         end
     end
 
-    % --- [Step 2] Inequality Constraints (Monotonicity) ---
-    % 目標：Pricing Kernel 隨 R 遞減 => exp(delta + sum theta*B) 遞減
-    % 因為 B-spline basis 是局部支撐且有序，若 theta_i >= theta_{i+1}，則曲線大致遞減。
-    % 建立差分矩陣 D，使得 D * theta <= 0 代表 theta_i - theta_{i-1} <= 0 (遞減)
-    % 或是 theta_{i+1} - theta_i <= 0
-    
-    num_params = b + 1;
-    % D * theta <= 0
-    % Row i: theta_{i+1} - theta_i <= 0
-    D = zeros(b, num_params);
-    for i = 1:b
-        D(i, i)   = -1;
-        D(i, i+1) =  1;
-    end
-    
-    % A_ineq * theta <= b_ineq
-    A_ineq = D; 
-    b_ineq = zeros(b, 1);
+    theta0 = zeros(Num_Basis_Function, 1);
 
-    % --- [Step 3] Optimization Setup ---
-    % Initial guess
-    theta0 = zeros(num_params, 1); 
-    
-    options = optimoptions('fmincon', ...
-        'Display', 'off', ... 
-        'Algorithm', 'sqp', ...
-        'ConstraintTolerance', 1e-6, ...
-        'StepTolerance', 1e-6, ...
-        'MaxFunctionEvaluations', 50000);
-        
-    % Define objective function
-    obj_fun = @(param) -log_likelihood_bspline(param, R_vec, Rf_vec, ...
-        Basis_Precomputed, Smooth_AllR, Smooth_AllR_RND, months, alpha, beta);
-
-    % --- [Step 4] Run Optimization ---
-    try
-        [theta_hat, neg_LL, exitflag, output] = fmincon( ...
-            obj_fun, theta0, A_ineq, b_ineq, [], [], [], [], [], options);
-    
-    catch ME
-        warning('fmincon failed for b=%d, alpha=%.2f, beta=%.2f. Message: %s', ...
-            b, alpha, beta, ME.message);
-        
-        theta_hat = theta0;
-        log_lik   = -Inf;
-        BIC       = Inf;
-        exitflag  = -999;
-        output    = struct();
-    
-        delta_vec = [];
-        M_vec     = [];
-        pit_vec   = [];
-    
-        return
-    end
-        
-    log_lik = -neg_LL;
-    
-    % Post-estimation call
-    if nargout > 5
-        [~, BIC, delta_vec, M_vec, pit_vec] = log_likelihood_bspline(theta_hat, R_vec, Rf_vec, ...
-            Basis_Precomputed, Smooth_AllR, Smooth_AllR_RND, months, alpha, beta);
+    if Enforce_Decreasing
+        % theta(i+1) - theta(i) <= 0 is sufficient for a non-increasing
+        % B-spline curve and therefore a non-increasing SDF in R.
+        A_ineq = zeros(Num_Basis_Function - 1, Num_Basis_Function);
+        for i = 1:(Num_Basis_Function - 1)
+            A_ineq(i, i) = -1;
+            A_ineq(i, i + 1) = 1;
+        end
+        b_ineq = zeros(Num_Basis_Function - 1, 1);
     else
-        [~, BIC] = log_likelihood_bspline(theta_hat, R_vec, Rf_vec, ...
-            Basis_Precomputed, Smooth_AllR, Smooth_AllR_RND, months, alpha, beta);
-        
-        delta_vec = [];
-        M_vec     = [];
-        pit_vec   = [];
+        A_ineq = [];
+        b_ineq = [];
     end
+
+    options = optimoptions('fmincon', ...
+        'Display', 'iter', ...
+        'Algorithm', 'sqp', ...
+        'ConstraintTolerance', 1e-8, ...
+        'OptimalityTolerance', 1e-7, ...
+        'StepTolerance', 1e-9, ...
+        'MaxIterations', 2000, ...
+        'MaxFunctionEvaluations', 50000);
+
+    objective = @(theta) -log_likelihood_bspline( ...
+        theta, R_vec, Rf_vec, Basis_Precomputed, R_Grid_Cell, ...
+        RND_PDF_Cell, Basis_At_Realized, RND_At_Realized);
+
+    try
+        [theta_hat, negative_log_lik, exitflag, output] = fmincon( ...
+            objective, theta0, A_ineq, b_ineq, [], [], ...
+            [], [], [], options);
+    catch ME
+        error('fmincon failed before producing a usable estimate: %s', ME.message);
+    end
+
+    log_lik = -negative_log_lik;
+    [~, BIC, kappa_vec, SDF_Cell, pit_vec, LL_contributions] = ...
+        log_likelihood_bspline(theta_hat, R_vec, Rf_vec, ...
+            Basis_Precomputed, R_Grid_Cell, RND_PDF_Cell, ...
+            Basis_At_Realized, RND_At_Realized);
+
+    Model_Info = struct();
+    Model_Info.spline_degree = Spline_Degree;
+    Model_Info.spline_order = Spline_Order;
+    Model_Info.num_basis_functions = Num_Basis_Function;
+    Model_Info.num_free_theta_parameters = Num_Basis_Function;
+    Model_Info.breaks = Breaks(:);
+    Model_Info.knots = Knots(:);
+    Model_Info.global_min_R = Global_Min_R;
+    Model_Info.global_max_R = Global_Max_R;
+    Model_Info.enforce_decreasing = logical(Enforce_Decreasing);
+    Model_Info.distortion_applied = false;
+    Model_Info.theta_normalization = "none";
 end
