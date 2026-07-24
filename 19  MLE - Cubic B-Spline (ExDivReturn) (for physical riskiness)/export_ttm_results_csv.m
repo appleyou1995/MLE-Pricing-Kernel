@@ -4,7 +4,7 @@ function [Theta_Table, Kappa_Table, Summary_Table, Manifest_Table] = ...
     exitflag, optim_output, Model_Info)
 %EXPORT_TTM_RESULTS_CSV Export compact estimates and partitioned SDF grids.
 
-    prefix = sprintf('CubicBSpline_NoDistortion_TTM%03d', Target_TTM);
+    prefix = sprintf('CubicBSpline_TTM%03d', Target_TTM);
     Grid_Output = fullfile(Path_Output, 'SDF_Grid_CSV');
     if ~exist(Grid_Output, 'dir'), mkdir(Grid_Output); end
 

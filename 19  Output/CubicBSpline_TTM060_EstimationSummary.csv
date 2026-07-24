@@ -1,0 +1,2 @@
+target_ttm_days,first_quote_date,last_quote_date,num_months,spline_degree,num_basis_functions,num_free_theta_parameters,decreasing_sdf_constraint,distortion_applied,log_likelihood,BIC,exitflag,iterations,function_count,first_order_optimality,min_kappa,max_kappa,min_grid_points,max_grid_points,observed_min_R,observed_max_R
+60,19960117,20241218,348,3,5,5,1,0,516.50148698213,-1003.74196156539,2,14,111,9.38181339737998e-06,0.870583344710021,0.910809879725919,30000,30000,0.003,3
