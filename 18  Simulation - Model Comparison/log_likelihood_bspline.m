@@ -1,7 +1,12 @@
 %% Log-Likelihood Function
 
 function [LL, BIC, delta_vec, M_vec, pit_vec] = log_likelihood_bspline(theta, R_vec, Rf_vec, ...
-    Basis_Precomputed, Smooth_AllR, Smooth_AllR_RND, months, alpha, beta)
+    Basis_Precomputed, Smooth_AllR, Smooth_AllR_RND, months, alpha, beta, ...
+    Monthly_Precomputed)
+
+    if nargin < 10
+        Monthly_Precomputed = [];
+    end
 
     T = length(R_vec);
     LL_contributions = zeros(T, 1);
@@ -38,11 +43,19 @@ function [LL, BIC, delta_vec, M_vec, pit_vec] = log_likelihood_bspline(theta, R_
         R_realized_t = R_vec(t);
         Rf_t         = Rf_vec(t);
         col_name     = months{t};
-        
-        R_axis = Smooth_AllR.(col_name);
-        f_star_curve = Smooth_AllR_RND.(col_name);
-        
-        B_mat = Basis_Precomputed{t};
+
+        if isempty(Monthly_Precomputed)
+            R_axis = Smooth_AllR.(col_name);
+            f_star_curve = Smooth_AllR_RND.(col_name);
+            log_f_star_precomputed = [];
+            B_mat = Basis_Precomputed{t};
+        else
+            R_axis = Monthly_Precomputed.R_Axis{t};
+            f_star_curve = Monthly_Precomputed.fQ{t};
+            log_f_star_precomputed = ...
+                Monthly_Precomputed.Log_fQ{t};
+            B_mat = Monthly_Precomputed.Basis{t};
+        end
         
         if isempty(R_axis) || isempty(f_star_curve) || isempty(B_mat)
              LL_contributions(t) = log(1e-12);
@@ -63,7 +76,11 @@ function [LL, BIC, delta_vec, M_vec, pit_vec] = log_likelihood_bspline(theta, R_
             continue
         end
 
-        log_f_star = log(f_star_curve);
+        if isempty(log_f_star_precomputed)
+            log_f_star = log(f_star_curve);
+        else
+            log_f_star = log_f_star_precomputed;
+        end
         log_integrand = log_f_star - Spline_Sum;
         log_integral = log_trapz_exp(R_axis, log_integrand);
 
