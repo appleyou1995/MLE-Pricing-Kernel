@@ -243,6 +243,56 @@ function [theta_hat, log_lik, BIC, exitflag, output, ...
     ll_grid = zeros(0, 1);
     bic_grid = zeros(0, 1);
     exit_grid = zeros(0, 1);
+    cached_candidate_used = false;
+
+    % A fitted null model can be supplied as the alpha=1 (or beta=1)
+    % candidate. This avoids solving an identical constrained MLE again
+    % inside every parameter search.
+    if isfield(S, 'CachedCandidate') && ...
+            ~isempty(S.CachedCandidate)
+
+        C = S.CachedCandidate;
+        cached_fields = { ...
+            'Parameter', 'Value', 'Theta', ...
+            'LogLikelihood', 'BIC', 'ExitFlag', ...
+            'OptimizerOutput'};
+
+        if ~all(isfield(C, cached_fields))
+            error('CachedCandidate is missing required fields.');
+        end
+
+        cached_parameter = lower(string(C.Parameter));
+        cached_value = C.Value;
+
+        if cached_parameter ~= parameter
+            error('CachedCandidate parameter does not match the search.');
+        end
+        if ~isscalar(cached_value) || ~isfinite(cached_value) || ...
+                cached_value <= lower_bound || ...
+                cached_value > upper_bound
+            error('CachedCandidate value lies outside the search bounds.');
+        end
+        if numel(C.Theta) ~= b + 1
+            error('CachedCandidate theta has an unexpected length.');
+        end
+        if ~isscalar(C.LogLikelihood) || ...
+                ~isfinite(C.LogLikelihood) || ...
+                ~isscalar(C.ExitFlag) || ...
+                ~isfinite(C.ExitFlag)
+            error('CachedCandidate has invalid likelihood or exitflag.');
+        end
+        if ~isstruct(C.OptimizerOutput)
+            error('CachedCandidate OptimizerOutput must be a struct.');
+        end
+
+        evaluated_values = round(cached_value, 10);
+        theta_grid = {C.Theta(:)};
+        optimizer_output_grid = {C.OptimizerOutput};
+        ll_grid = C.LogLikelihood;
+        bic_grid = C.BIC;
+        exit_grid = C.ExitFlag;
+        cached_candidate_used = true;
+    end
 
     if Show_Search_Progress
         fprintf('\nStarting adaptive %s search.\n', parameter);
@@ -477,7 +527,10 @@ function [theta_hat, log_lik, BIC, exitflag, output, ...
             'SearchExpanded', boundary_expanded, ...
             'BoundaryHit', boundary_hit, ...
             'SearchStopReason', "no finite-likelihood candidate", ...
-            'NumCandidatesEvaluated', numel(evaluated_values));
+            'NumCandidatesEvaluated', numel(evaluated_values), ...
+            'NumCandidatesEstimated', ...
+                numel(evaluated_values) - cached_candidate_used, ...
+            'CachedCandidateUsed', cached_candidate_used);
         delta_vec = [];
         M_vec = [];
         pit_vec = [];
@@ -513,6 +566,9 @@ function [theta_hat, log_lik, BIC, exitflag, output, ...
         max(sorted_values) > initial_max;
     output.BoundaryHit = boundary_hit;
     output.NumCandidatesEvaluated = numel(sorted_values);
+    output.NumCandidatesEstimated = ...
+        numel(sorted_values) - cached_candidate_used;
+    output.CachedCandidateUsed = cached_candidate_used;
     if isempty(stop_reasons)
         output.SearchStopReason = "interior optimum";
     else
