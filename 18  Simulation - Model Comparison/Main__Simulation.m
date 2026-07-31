@@ -22,10 +22,7 @@ end
 Target_TTM = 30;
 b = 6;
 
-% The directional search changes the estimator, so the earlier B=2
-% checkpoint is intentionally incompatible. Validate the revised search
-% with B=2 before changing this target back to 50.
-Num_Simulations = 2;
+Num_Simulations = 50;
 Num_Bins_List = [10, 20];
 Requested_Num_Workers = 6;
 % Save a checkpoint after each worker-sized batch.
