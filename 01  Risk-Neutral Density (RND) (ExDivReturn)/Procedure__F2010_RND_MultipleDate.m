@@ -2,15 +2,24 @@ clear; clc
 
 Path_MainFolder = 'D:\Google\我的雲端硬碟\學術｜研究與論文\論文著作\MLE Pricing Kernel';
 
-Path_Data     = fullfile(Path_MainFolder, 'Code', '00  Output');
-Path_Output   = fullfile(Path_MainFolder, 'Code', '01  Output');
+Path_Data     = fullfile(Path_MainFolder, 'Code', '00  Hsieh');
+Path_Output   = fullfile(Path_MainFolder, 'Code', '01  Output - Hsieh');
 Path_Data_inc = fullfile(Path_MainFolder, 'Data', 'IndexOptions1996202508_SP500', 'IV-Based');
 
-% Specific Time-to-Maturity
-% Target_AllTTM = 30;
-% Target_AllTTM = 60;
-Target_AllTTM = 90;
-% Target_AllTTM = 180;
+if ~exist(Path_Output, 'dir')
+    mkdir(Path_Output);
+end
+
+% Time-to-Maturity values to estimate.
+Target_AllTTM_List = [30, 60, 90, 180];
+Valid_TTM_List = [30, 60, 90, 180];
+
+if isempty(Target_AllTTM_List) || ...
+        any(~ismember(Target_AllTTM_List, Valid_TTM_List))
+    error('Target_AllTTM_List must contain one or more values from [30, 60, 90, 180].');
+end
+
+Target_AllTTM_List = unique(Target_AllTTM_List, 'stable');
 
 Num_Grid = 30000;
 
@@ -34,6 +43,18 @@ Data_DY(:, 1) = [];
 
 % Convert dividend date to datenum for fallback search
 Data_DY_DateNum = datenum(num2str(Data_DY(:, 1)), 'yyyymmdd');
+
+
+%% Estimate each requested TTM
+
+for ttm_idx = 1:numel(Target_AllTTM_List)
+
+    Target_AllTTM = Target_AllTTM_List(ttm_idx);
+
+    fprintf('\n============================================================\n');
+    fprintf('Starting RND estimation for TTM = %d (%d of %d)\n', ...
+            Target_AllTTM, ttm_idx, numel(Target_AllTTM_List));
+    fprintf('============================================================\n');
 
 
 %% Load Target Date
@@ -1145,10 +1166,17 @@ FileName_Diag_All = fullfile(Path_Output, ...
 
 writetable(Table_Diagnostics_All, FileName_Diag_All);
 
-disp('All done.');
+fprintf('Finished RND estimation for TTM = %d.\n', Target_AllTTM);
 
-clear Data_RF Data_DY Data_DY_DateNum
 clear Table_Diagnostics_All FileName_Diag_All
 clear Target_AllDate Target_AllDate_date Target_AllDate_exdate
+clear Target_AllTTM years y d year_now month_in_year RUN_MODE Path_Data_01
+
+end
+
+
+disp('All requested TTM estimations are complete.');
+
+clear Data_RF Data_DY Data_DY_DateNum
 clear Path_MainFolder Path_Data Path_Output Path_Data_inc Path_RND_Function
-clear Target_AllTTM Num_Grid years y d year_now month_in_year
+clear Target_AllTTM_List Valid_TTM_List ttm_idx Num_Grid
