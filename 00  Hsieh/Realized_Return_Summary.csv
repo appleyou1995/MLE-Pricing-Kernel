@@ -1,0 +1,5 @@
+TTM,n_target_rows,n_realized_rows,n_dropped_rows,first_valid_date,last_valid_date,first_dropped_date,output_file,audit_file
+30,348,348,0,19960118,20241218,,Realized_Return_TTM_30.csv,Realized_Return_TTM_30_audit.csv
+60,348,348,0,19960116,20241223,,Realized_Return_TTM_60.csv,Realized_Return_TTM_60_audit.csv
+90,344,344,0,19960122,20241223,,Realized_Return_TTM_90.csv,Realized_Return_TTM_90_audit.csv
+180,171,171,0,19960325,20241223,,Realized_Return_TTM_180.csv,Realized_Return_TTM_180_audit.csv
