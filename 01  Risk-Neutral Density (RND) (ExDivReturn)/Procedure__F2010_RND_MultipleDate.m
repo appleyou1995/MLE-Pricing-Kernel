@@ -11,7 +11,11 @@ if ~exist(Path_Output, 'dir')
 end
 
 % Time-to-Maturity values to estimate.
-Target_AllTTM_List = [30, 60, 90, 180];
+% Examples:
+% Target_AllTTM_List = 90;            % Run only TTM = 90
+% Target_AllTTM_List = [30, 180];     % Run selected TTMs
+Target_AllTTM_List = [30, 60, 90, 180];  % Run all four TTMs
+
 Valid_TTM_List = [30, 60, 90, 180];
 
 if isempty(Target_AllTTM_List) || ...
@@ -192,8 +196,8 @@ years = unique(floor(Target_AllDate_date / 10000));
 
 %% Construct Risk-Neutral Density
 
-Path_Data_01 = fullfile(Path_MainFolder, 'Code', '01  Risk-Neutral Density (RND)');
-addpath(Path_Data_01);
+Path_RND_Function = fileparts(mfilename('fullpath'));
+addpath(Path_RND_Function);
 
 Table_Diagnostics_All = table();
 
@@ -1170,7 +1174,7 @@ fprintf('Finished RND estimation for TTM = %d.\n', Target_AllTTM);
 
 clear Table_Diagnostics_All FileName_Diag_All
 clear Target_AllDate Target_AllDate_date Target_AllDate_exdate
-clear Target_AllTTM years y d year_now month_in_year RUN_MODE Path_Data_01
+clear Target_AllTTM years y d year_now month_in_year RUN_MODE
 
 end
 
