@@ -22,7 +22,7 @@ end
 Target_TTM = 30;
 b = 6;
 
-Num_Simulations = 50;
+Num_Simulations = 200;
 Num_Bins_List = [10, 20];
 Requested_Num_Workers = 6;
 % Save a checkpoint after each worker-sized batch.
