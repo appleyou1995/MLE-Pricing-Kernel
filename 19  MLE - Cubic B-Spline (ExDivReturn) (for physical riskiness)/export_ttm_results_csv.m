@@ -1,24 +1,15 @@
-function [Theta_Table, Kappa_Table, Summary_Table, Manifest_Table] = ...
-    export_ttm_results_csv(Path_Output, Target_TTM, Data, theta_hat, ...
-    kappa_vec, SDF_Cell, log_lik, BIC, ...
-    exitflag, optim_output, Model_Info)
-%EXPORT_TTM_RESULTS_CSV Export compact estimates and partitioned SDF grids.
-
-    prefix = sprintf('CubicBSpline_TTM%03d', Target_TTM);
-    Grid_Output = fullfile(Path_Output, 'SDF_Grid_CSV');
-    if ~exist(Grid_Output, 'dir'), mkdir(Grid_Output); end
+function [Theta_Table, Kappa_Table, Summary_Table, R_Grid_Table, ...
+    G_Shape_Table, G_TimeScale_Table] = export_ttm_results_csv( ...
+    Target_TTM, Data, theta_hat, kappa_vec, SDF_Cell, ...
+    log_lik, BIC, exitflag, optim_output, Model_Info)
+%EXPORT_TTM_RESULTS_CSV Build compact estimates and g components in memory.
+%
+% No per-TTM CSV, annual SDF grid, manifest, or Python example is written.
 
     num_theta = numel(theta_hat);
     Theta_Table = table( ...
         repmat(Target_TTM, num_theta, 1), theta_hat(:), ...
         'VariableNames', {'TTM', 'theta'});
-    writetable(Theta_Table, fullfile(Path_Output, [prefix '_Theta.csv']));
-
-    Knot_Table = table( ...
-        repmat(Target_TTM, numel(Model_Info.knots), 1), ...
-        (1:numel(Model_Info.knots))', Model_Info.knots(:), ...
-        'VariableNames', {'target_ttm_days', 'knot_index', 'knot_value'});
-    writetable(Knot_Table, fullfile(Path_Output, [prefix '_Knots.csv']));
 
     date_col = sprintf('date_TTM_%d', Target_TTM);
     exdate_col = sprintf('exdate_TTM_%d', Target_TTM);
@@ -26,7 +17,6 @@ function [Theta_Table, Kappa_Table, Summary_Table, Manifest_Table] = ...
     Kappa_Table = table( ...
         Data.Quote_Dates(:), Data.Expiration_Dates(:), kappa_vec(:), ...
         'VariableNames', {date_col, exdate_col, kappa_col});
-    writetable(Kappa_Table, fullfile(Path_Output, [prefix '_Kappa.csv']));
 
     iterations = get_optim_field(optim_output, 'iterations');
     func_count = get_optim_field(optim_output, 'funcCount');
@@ -49,72 +39,91 @@ function [Theta_Table, Kappa_Table, Summary_Table, Manifest_Table] = ...
         'function_count', 'first_order_optimality', 'min_kappa', ...
         'max_kappa', 'min_grid_points', 'max_grid_points', ...
         'observed_min_R', 'observed_max_R'});
-    writetable(Summary_Table, fullfile(Path_Output, ...
-        [prefix '_EstimationSummary.csv']));
 
-    quote_years = floor(Data.Quote_Dates ./ 10000);
-    unique_years = unique(quote_years);
-    Manifest_Table = table();
+    % All compact g components use the same 30,000-point gross-return grid.
+    first_field = Data.Smooth_AllR.Properties.VariableNames{1};
+    sample_R = double(Data.Smooth_AllR.(first_field)(:));
+    grid_index = (1:numel(sample_R))';
 
-    for y_idx = 1:numel(unique_years)
-        calendar_year = unique_years(y_idx);
-        month_idx = find(quote_years == calendar_year);
-        total_rows = sum(Data.Grid_Lengths(month_idx));
-
-        target_ttm_col = repmat(Target_TTM, total_rows, 1);
-        quote_date_col = zeros(total_rows, 1);
-        grid_index_col = zeros(total_rows, 1);
-        gross_return_col = zeros(total_rows, 1);
-        sdf_col = zeros(total_rows, 1);
-
-        row_start = 1;
-        for j = 1:numel(month_idx)
-            t = month_idx(j);
-            R_axis = Data.Smooth_AllR.( ...
-                Data.Smooth_AllR.Properties.VariableNames{t});
-            R_axis = R_axis(:);
-            sdf = SDF_Cell{t}(:);
-            if numel(sdf) ~= numel(R_axis) || any(~isfinite(sdf))
-                error('Invalid SDF grid for TTM %d, quote date %08d.', ...
-                    Target_TTM, Data.Quote_Dates(t));
-            end
-
-            row_end = row_start + numel(R_axis) - 1;
-            rows = row_start:row_end;
-            quote_date_col(rows) = Data.Quote_Dates(t);
-            grid_index_col(rows) = (1:numel(R_axis))';
-            gross_return_col(rows) = R_axis;
-            sdf_col(rows) = sdf;
-            row_start = row_end + 1;
+    for month_idx = 2:width(Data.Smooth_AllR)
+        current_field = Data.Smooth_AllR.Properties.VariableNames{month_idx};
+        current_R = double(Data.Smooth_AllR.(current_field)(:));
+        if numel(current_R) ~= numel(sample_R) || ...
+                max(abs(current_R - sample_R)) > 1e-12
+            error(['R grid differs across quote dates for TTM = %d; ' ...
+                'compact g export requires one common R grid.'], Target_TTM);
         end
-
-        Grid_Table = table(target_ttm_col, quote_date_col, ...
-            grid_index_col, gross_return_col, sdf_col, ...
-            'VariableNames', {'target_ttm_days', 'quote_date', ...
-            'grid_index', 'gross_return_R', 'sdf_M'});
-
-        grid_file_name = sprintf('%s_SDFGrid_%d.csv', prefix, calendar_year);
-        writetable(Grid_Table, fullfile(Grid_Output, grid_file_name));
-
-        relative_file = fullfile('SDF_Grid_CSV', grid_file_name);
-        manifest_row = table( ...
-            Target_TTM, calendar_year, string(relative_file), ...
-            numel(month_idx), total_rows, ...
-            min(Data.Quote_Dates(month_idx)), ...
-            max(Data.Quote_Dates(month_idx)), ...
-            min(Data.Grid_Lengths(month_idx)), ...
-            max(Data.Grid_Lengths(month_idx)), ...
-            "target_ttm_days|quote_date|grid_index|gross_return_R|sdf_M", ...
-            'VariableNames', {'target_ttm_days', 'calendar_year', ...
-            'relative_file', 'quote_date_count', 'row_count', ...
-            'first_quote_date', 'last_quote_date', ...
-            'min_grid_points_per_date', 'max_grid_points_per_date', ...
-            'columns'});
-        Manifest_Table = [Manifest_Table; manifest_row]; %#ok<AGROW>
     end
 
-    writetable(Manifest_Table, fullfile(Path_Output, ...
-        [prefix '_SDFGrid_Manifest.csv']));
+    knots = Model_Info.knots(:)';
+    spline_curve = spmak(knots, theta_hat(:)');
+    q = fnval(spline_curve, sample_R')';
+    q_d1 = fnval(fnder(spline_curve, 1), sample_R')';
+    q_d2 = fnval(fnder(spline_curve, 2), sample_R')';
+
+    q_basis = spcol(knots, Model_Info.spline_order, sample_R) * theta_hat(:);
+    basis_error = max(abs(q - q_basis));
+    if basis_error > 1e-11
+        error('B-spline representation mismatch for TTM = %d: %.3e.', ...
+            Target_TTM, basis_error);
+    end
+    if any(abs(q) > 60)
+        error(['TTM = %d produces |q(R)| > 60 on the export grid; ' ...
+            'the compact g representation would differ from the MLE clipping.'], ...
+            Target_TTM);
+    end
+
+    g_shape = exp(-q);
+    g_shape_d1 = -q_d1 .* g_shape;
+    g_shape_d2 = (q_d1 .^ 2 - q_d2) .* g_shape;
+
+    if any(~isfinite(g_shape)) || any(g_shape <= 0) || ...
+            any(~isfinite(g_shape_d1)) || any(~isfinite(g_shape_d2))
+        error('Non-finite g-shape values found for TTM = %d.', Target_TTM);
+    end
+
+    monotonicity_tolerance = 1e-10 * max(1, max(abs(g_shape_d1)));
+    if min(g_shape_d1) < -monotonicity_tolerance
+        error('g-shape is not non-decreasing for TTM = %d.', Target_TTM);
+    end
+
+    R_Grid_Table = table(grid_index, sample_R, ...
+        'VariableNames', {'grid_index', 'gross_return_R'});
+    G_Shape_Table = table( ...
+        repmat(Target_TTM, numel(sample_R), 1), grid_index, ...
+        g_shape, g_shape_d1, g_shape_d2, ...
+        'VariableNames', {'TTM', 'grid_index', 'g_shape', ...
+        'g_shape_d1', 'g_shape_d2'});
+
+    rf_gross = double(Data.Risk_Free_Rate(:));
+    g_scale = exp(-kappa_vec(:)) ./ rf_gross;
+    if any(~isfinite(g_scale)) || any(g_scale <= 0)
+        error('Invalid g time scale for TTM = %d.', Target_TTM);
+    end
+
+    G_TimeScale_Table = table( ...
+        repmat(Target_TTM, numel(Data.Quote_Dates), 1), ...
+        Data.Quote_Dates(:), Data.Expiration_Dates(:), ...
+        rf_gross, kappa_vec(:), g_scale, ...
+        'VariableNames', {'TTM', 'quote_date', 'expiration_date', ...
+        'rf_gross', 'kappa', 'g_scale'});
+
+    % Validate the compact split against the directly estimated SDF.
+    if isempty(SDF_Cell) || isempty(SDF_Cell{1})
+        error('The estimated SDF grid is unavailable for TTM = %d.', Target_TTM);
+    end
+    reconstructed_M = exp(kappa_vec(1) + q);
+    sample_M = double(SDF_Cell{1}(:));
+    sdf_relative_error = max(abs(reconstructed_M - sample_M) ./ ...
+        max(1, abs(sample_M)));
+    if sdf_relative_error > 1e-11
+        error('Compact g validation failed for TTM = %d: %.3e.', ...
+            Target_TTM, sdf_relative_error);
+    end
+
+    fprintf(['  compact g: %d grid points, basis error = %.3e, ' ...
+        'SDF relative error = %.3e\n'], ...
+        numel(sample_R), basis_error, sdf_relative_error);
 end
 
 

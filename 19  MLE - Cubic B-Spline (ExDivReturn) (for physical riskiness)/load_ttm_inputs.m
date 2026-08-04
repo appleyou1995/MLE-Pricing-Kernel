@@ -1,12 +1,37 @@
 function Data = load_ttm_inputs(Path_Data, Path_RND, Risk_Free_Rate_All, ...
     Target_TTM, Sample_Start, Sample_End, Expected_Grid_Size)
-%LOAD_TTM_INPUTS Load and strictly align one TTM sample by quote date.
+%LOAD_TTM_INPUTS Load one TTM using its own Hsieh contract-date sample.
 
-    years_to_merge = year_from_yyyymmdd(Sample_Start):year_from_yyyymmdd(Sample_End);
+    target_file = fullfile(Path_Data, sprintf('TTM_%d.csv', Target_TTM));
+    Target_Table = readtable(target_file);
+    require_variables(Target_Table, {'date', 'exdate'}, target_file);
+
+    target_dates = double(Target_Table.date);
+    target_exdates = double(Target_Table.exdate);
+    in_sample = target_dates >= Sample_Start & target_dates <= Sample_End;
+    target_dates = target_dates(in_sample);
+    target_exdates = target_exdates(in_sample);
+
+    [target_dates, target_sort_idx] = sort(target_dates);
+    target_exdates = target_exdates(target_sort_idx);
+
+    if isempty(target_dates)
+        error('TTM = %d has no target dates in the requested sample.', Target_TTM);
+    end
+    if numel(unique(target_dates)) ~= numel(target_dates)
+        error('Duplicate target dates found in %s.', target_file);
+    end
+    target_months = floor(target_dates ./ 100);
+    if numel(unique(target_months)) ~= numel(target_months)
+        error('TTM = %d has more than one target date in a calendar month.', ...
+            Target_TTM);
+    end
+
+    required_years = unique(floor(target_dates ./ 10000));
     Smooth_AllR = table();
     Smooth_AllR_RND = table();
 
-    for calendar_year = years_to_merge
+    for calendar_year = required_years(:)'
         input_file = fullfile(Path_RND, sprintf( ...
             'TTM_%d_RND_Tables_%d.mat', Target_TTM, calendar_year));
         if ~isfile(input_file)
@@ -51,16 +76,16 @@ function Data = load_ttm_inputs(Path_Data, Path_RND, Risk_Free_Rate_All, ...
     Smooth_AllR = Smooth_AllR(:, sort_idx);
     Smooth_AllR_RND = Smooth_AllR_RND(:, sort_idx);
 
-    expected_months = 12 * numel(years_to_merge);
-    if numel(rnd_dates) ~= expected_months
-        error(['TTM = %d has %d RND months in %d-%d; expected %d. ' ...
-            'The estimation is stopped rather than silently dropping months.'], ...
-            Target_TTM, numel(rnd_dates), years_to_merge(1), ...
-            years_to_merge(end), expected_months);
+    missing_rnd_dates = setdiff(target_dates, rnd_dates);
+    extra_rnd_dates = setdiff(rnd_dates, target_dates);
+    if ~isempty(missing_rnd_dates) || ~isempty(extra_rnd_dates)
+        error(['TTM = %d RND dates do not exactly match TTM_%d.csv. ' ...
+            'Missing RND dates: %s; unexpected RND dates: %s'], ...
+            Target_TTM, Target_TTM, preview_dates(missing_rnd_dates), ...
+            preview_dates(extra_rnd_dates));
     end
-    ym = floor(rnd_dates ./ 100);
-    if numel(unique(ym)) ~= expected_months
-        error('TTM = %d does not have exactly one RND quote date per month.', Target_TTM);
+    if ~isequal(rnd_dates(:), target_dates(:))
+        error('TTM = %d date ordering could not be aligned.', Target_TTM);
     end
 
     realized_file = fullfile(Path_Data, sprintf( ...
@@ -85,29 +110,21 @@ function Data = load_ttm_inputs(Path_Data, Path_RND, Risk_Free_Rate_All, ...
         error('Duplicate risk-free dates found for TTM = %d.', Target_TTM);
     end
 
-    target_file = fullfile(Path_Data, sprintf('TTM_%d.csv', Target_TTM));
-    Target_Table = readtable(target_file);
-    require_variables(Target_Table, {'date', 'exdate'}, target_file);
-    target_dates = double(Target_Table.date);
-    target_exdates = double(Target_Table.exdate);
-    if numel(unique(target_dates)) ~= numel(target_dates)
-        error('Duplicate target dates found in %s.', target_file);
-    end
-
-    assert_all_dates_present(rnd_dates, realized_dates, 'realized return', Target_TTM);
-    assert_all_dates_present(rnd_dates, rf_dates_all, 'risk-free rate', Target_TTM);
-    assert_all_dates_present(rnd_dates, target_dates, 'target expiration', Target_TTM);
+    assert_all_dates_present(rnd_dates, realized_dates, ...
+        'realized return', Target_TTM);
+    assert_all_dates_present(rnd_dates, rf_dates_all, ...
+        'risk-free rate', Target_TTM);
 
     [~, idx_realized] = ismember(rnd_dates, realized_dates);
     [~, idx_rf] = ismember(rnd_dates, rf_dates_all);
-    [~, idx_target] = ismember(rnd_dates, target_dates);
 
     Realized_Return = Realized_All(idx_realized, :);
     Risk_Free_Rate = rf_values_all(idx_rf);
-    Expiration_Dates = target_exdates(idx_target);
+    Expiration_Dates = target_exdates;
 
     quote_dt = datetime(string(rnd_dates), 'InputFormat', 'yyyyMMdd');
-    expiration_dt = datetime(string(Expiration_Dates), 'InputFormat', 'yyyyMMdd');
+    expiration_dt = datetime(string(Expiration_Dates), ...
+        'InputFormat', 'yyyyMMdd');
     Actual_TTM_Days = days(expiration_dt - quote_dt);
 
     Grid_Lengths = zeros(numel(rnd_dates), 1);
@@ -117,10 +134,8 @@ function Data = load_ttm_inputs(Path_Data, Path_RND, Risk_Free_Rate_All, ...
     rnd_fields = Smooth_AllR_RND.Properties.VariableNames;
 
     for j = 1:numel(fields)
-        R_axis = Smooth_AllR.(fields{j});
-        rnd_pdf = Smooth_AllR_RND.(rnd_fields{j});
-        R_axis = R_axis(:);
-        rnd_pdf = rnd_pdf(:);
+        R_axis = double(Smooth_AllR.(fields{j})(:));
+        rnd_pdf = double(Smooth_AllR_RND.(rnd_fields{j})(:));
         Grid_Lengths(j) = numel(R_axis);
 
         if numel(rnd_pdf) ~= numel(R_axis)
@@ -131,10 +146,12 @@ function Data = load_ttm_inputs(Path_Data, Path_RND, Risk_Free_Rate_All, ...
                 rnd_dates(j), numel(R_axis), Expected_Grid_Size);
         end
         if any(~isfinite(R_axis)) || any(~isfinite(rnd_pdf))
-            error('Non-finite R or RND value found on quote date %08d.', rnd_dates(j));
+            error('Non-finite R or RND value found on quote date %08d.', ...
+                rnd_dates(j));
         end
         if any(diff(R_axis) <= 0)
-            error('R grid is not strictly increasing on quote date %08d.', rnd_dates(j));
+            error('R grid is not strictly increasing on quote date %08d.', ...
+                rnd_dates(j));
         end
         if any(rnd_pdf < 0) || trapz(R_axis, rnd_pdf) <= 0
             error('Invalid RND density found on quote date %08d.', rnd_dates(j));
@@ -168,7 +185,8 @@ function require_variables(T, required_names, source_name)
     available = T.Properties.VariableNames;
     missing = required_names(~ismember(required_names, available));
     if ~isempty(missing)
-        error('%s is missing variables: %s', source_name, strjoin(missing, ', '));
+        error('%s is missing variables: %s', source_name, ...
+            strjoin(missing, ', '));
     end
 end
 
@@ -176,13 +194,21 @@ end
 function assert_all_dates_present(master_dates, available_dates, label, Target_TTM)
     missing = setdiff(master_dates, available_dates);
     if ~isempty(missing)
-        preview = sprintf('%08d ', missing(1:min(6, numel(missing))));
         error('TTM = %d is missing %s data for quote date(s): %s', ...
-            Target_TTM, label, strtrim(preview));
+            Target_TTM, label, preview_dates(missing));
     end
 end
 
 
-function y = year_from_yyyymmdd(date_number)
-    y = floor(double(date_number) / 10000);
+function output = preview_dates(date_values)
+    if isempty(date_values)
+        output = 'none';
+        return
+    end
+    date_values = date_values(:);
+    shown = date_values(1:min(6, numel(date_values)));
+    output = strtrim(sprintf('%08d ', shown));
+    if numel(date_values) > numel(shown)
+        output = [output ' ...'];
+    end
 end
