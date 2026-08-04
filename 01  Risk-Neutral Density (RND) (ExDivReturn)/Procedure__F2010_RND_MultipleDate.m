@@ -14,9 +14,10 @@ end
 % Examples:
 % Target_AllTTM_List = 90;            % Run only TTM = 90
 % Target_AllTTM_List = [30, 180];     % Run selected TTMs
-Target_AllTTM_List = [30, 60, 90, 180];  % Run all four TTMs
+% Target_AllTTM_List = 90;            % Run only TTM = 90
 
-Valid_TTM_List = [30, 60, 90, 180];
+Target_AllTTM_List = [30, 60, 90, 180];
+Valid_TTM_List     = [30, 60, 90, 180];
 
 if isempty(Target_AllTTM_List) || ...
         any(~ismember(Target_AllTTM_List, Valid_TTM_List))
@@ -686,7 +687,7 @@ for y = 1:length(years)
         Diag.N_FinalObs = Num_Obs;
         Diag.N_UniqueK  = Num_UniqueK;
 
-        if Num_Obs < 10 || Num_UniqueK < 6
+        if Num_Obs < 4 || Num_UniqueK < 4
             warning('Too few option observations for Target_Date = %d. Obs = %d, Unique K = %d. Skip.', ...
                     Target_Date, Num_Obs, Num_UniqueK);
 
